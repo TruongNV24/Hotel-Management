@@ -1,6 +1,8 @@
 package com.cnj42.hotel.ui;
 
+import com.cnj42.hotel.model.DashboardData;
 import com.cnj42.hotel.model.User;
+import com.cnj42.hotel.service.DashboardService;
 import com.cnj42.hotel.utils.DBConnection;
 import java.util.Locale;
 import javax.swing.*;
@@ -54,6 +56,7 @@ public class MainFrame extends JFrame {
     // =========================================================
 
     private final User currentUser;
+    private final DashboardService dashboardService;
 
     // =========================================================
     // UI
@@ -87,6 +90,7 @@ public class MainFrame extends JFrame {
     public MainFrame(User user) {
 
         this.currentUser = user;
+        this.dashboardService = new DashboardService();
 
         setTitle("Hotel Management System");
         setSize(1440, 900);
@@ -1157,51 +1161,30 @@ public class MainFrame extends JFrame {
     private void loadDashboardData() {
 
         SwingUtilities.invokeLater(() -> {
+            DashboardData data = dashboardService.getDashboardData();
 
-            String sqlTotal = "SELECT COUNT(*) FROM rooms";
+            int total = data.getTotalRooms();
+            int available = data.getAvailableRooms();
+            int occupied = data.getOccupiedRooms();
+            int reservations = data.getActiveReservations();
 
-            String sqlAvailable = "SELECT COUNT(*) FROM rooms " +
-                    "WHERE status = 'AVAILABLE'";
+            totalRoomsLabel.setText(String.valueOf(total));
+            availableRoomsLabel.setText(String.valueOf(available));
+            occupiedRoomsLabel.setText(String.valueOf(occupied));
+            reservationsLabel.setText(String.valueOf(reservations));
 
-            String sqlOccupied = "SELECT COUNT(*) FROM rooms " +
-                    "WHERE status = 'OCCUPIED'";
+            totalRoomsDesc.setText("Tất cả phòng");
+            availableRoomsDesc.setText(formatPercentDesc(available, total));
+            occupiedRoomsDesc.setText(formatPercentDesc(occupied, total));
+            reservationsDesc.setText(formatPercentDesc(reservations, total));
 
-            String sqlReservations = "SELECT COUNT(*) FROM reservations " +
-                    "WHERE status IN " +
-                    "('PENDING', 'CONFIRMED')";
+            int[] roomStatusValues = data.getRoomStatusSummary();
+            donutChartPanel.setValues(roomStatusValues);
+            refreshRoomLegend(roomStatusValues);
 
-            try (Connection conn = DBConnection.getConnection()) {
-
-                int total = executeCount(conn, sqlTotal);
-                int available = executeCount(conn, sqlAvailable);
-                int occupied = executeCount(conn, sqlOccupied);
-                int reservations = executeCount(conn, sqlReservations);
-
-                totalRoomsLabel.setText(String.valueOf(total));
-                availableRoomsLabel.setText(String.valueOf(available));
-                occupiedRoomsLabel.setText(String.valueOf(occupied));
-                reservationsLabel.setText(String.valueOf(reservations));
-
-                totalRoomsDesc.setText("Tất cả phòng");
-                availableRoomsDesc.setText(formatPercentDesc(available, total));
-                occupiedRoomsDesc.setText(formatPercentDesc(occupied, total));
-                reservationsDesc.setText(formatPercentDesc(reservations, total));
-
-                int[] roomStatusValues = loadRoomStatusSummary(conn);
-                donutChartPanel.setValues(roomStatusValues);
-                refreshRoomLegend(roomStatusValues);
-
-                int[] revenueTrend = loadRevenueTrend(conn);
-                revenueChartPanel.setValues(revenueTrend);
-
-                long monthRevenue = loadMonthlyRevenue(conn);
-                long previousMonthRevenue = loadPreviousMonthRevenue(conn);
-                revenueTotalLabel.setText(formatMoney(monthRevenue));
-                revenueChangeLabel.setText(buildRevenueChangeText(monthRevenue, previousMonthRevenue));
-
-            } catch (SQLException e) {
-                System.err.println("Dashboard database error: " + e.getMessage());
-            }
+            revenueChartPanel.setValues(data.getRevenueTrend());
+            revenueTotalLabel.setText(formatMoney(data.getMonthlyRevenue()));
+            revenueChangeLabel.setText(buildRevenueChangeText(data.getMonthlyRevenue(), data.getPreviousMonthRevenue()));
         });
     }
 
