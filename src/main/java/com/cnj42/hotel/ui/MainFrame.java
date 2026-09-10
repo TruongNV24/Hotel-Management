@@ -3,6 +3,7 @@ package com.cnj42.hotel.ui;
 import com.cnj42.hotel.model.DashboardData;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.DashboardService;
+import com.cnj42.hotel.service.RoomService;
 import com.cnj42.hotel.utils.DBConnection;
 import java.util.Locale;
 import javax.swing.*;
@@ -197,7 +198,7 @@ public class MainFrame extends JFrame {
 
         addSectionTitle(menu, "QUẢN LÝ");
 
-        addMenuButton(menu, "🛏", "Quản lý phòng", false, () -> openModule("Quản lý phòng"));
+        addMenuButton(menu, "🛏", "Quản lý phòng", false, this::showRoomManagement);
         addMenuButton(menu, "🏷", "Loại phòng", false, () -> openModule("Loại phòng"));
         addMenuButton(menu, "👤", "Khách hàng", false, () -> openModule("Khách hàng"));
         addMenuButton(menu, "📅", "Đặt phòng", false, () -> openModule("Đặt phòng"));
@@ -1075,6 +1076,9 @@ public class MainFrame extends JFrame {
                 return;
             }
 
+            ensureRoomImageColumn(conn);
+            ensureRoomAmenitiesColumn(conn);
+
             int userCount = countRows(conn, "users");
             int roomCount = countRows(conn, "rooms");
             int reservationCount = countRows(conn, "reservations");
@@ -1090,6 +1094,50 @@ public class MainFrame extends JFrame {
             }
             System.err.println("Database bootstrap check failed: " + e.getMessage());
         }
+    }
+
+    private void ensureRoomImageColumn(Connection conn) throws SQLException {
+        String sql = "SELECT data_type FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'image_path'";
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            if (!rs.next()) {
+                try (Statement alter = conn.createStatement()) {
+                    alter.executeUpdate("ALTER TABLE rooms ADD COLUMN image_path JSON AFTER status");
+                }
+            } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
+                try (Statement alter = conn.createStatement()) {
+                    alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON " +
+                            "USING (CASE WHEN image_path IS NULL OR TRIM(image_path) = '' " +
+                            "THEN NULL ELSE JSON_ARRAY(image_path) END)");
+                }
+            }
+        }
+    }
+
+    private void ensureRoomAmenitiesColumn(Connection conn) throws SQLException {
+        String sql = "SELECT data_type FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'amenities'";
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            if (!rs.next()) {
+                try (Statement alter = conn.createStatement()) {
+                    alter.executeUpdate("ALTER TABLE rooms ADD COLUMN amenities JSON AFTER image_path");
+                }
+            } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
+                try (Statement alter = conn.createStatement()) {
+                    alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON " +
+                            "USING (CASE WHEN amenities IS NULL OR TRIM(amenities) = '' " +
+                            "THEN NULL ELSE JSON_ARRAY(amenities) END)");
+                }
+            }
+        }
+    }
+
+    private boolean isJsonColumnType(Connection conn, String dataType) throws SQLException {
+        if ("json".equalsIgnoreCase(dataType)) return true;
+        return "longtext".equalsIgnoreCase(dataType)
+                && conn.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT).contains("maria");
     }
 
     private boolean tableExists(Connection conn, String tableName) throws SQLException {
@@ -1677,6 +1725,40 @@ public class MainFrame extends JFrame {
         }
 
         return currentUser.getRole().toString();
+    }
+
+    // =========================================================
+    // ROOM MANAGEMENT
+    // =========================================================
+
+    private void showRoomManagement() {
+        pageTitle.setText("Quản lý phòng");
+        pageDescription.setText("Danh sách và quản lý thông tin phòng");
+
+        contentPanel.removeAll();
+        contentPanel.add(new RoomManagerPanel(this::showAddRoom, this::showEditRoom), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showAddRoom() {
+        pageTitle.setText("Thêm phòng");
+        pageDescription.setText("Tạo mới thông tin phòng");
+
+        contentPanel.removeAll();
+        contentPanel.add(new AddRoomPanel(), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showEditRoom(com.cnj42.hotel.model.Room room) {
+        pageTitle.setText("Sửa phòng");
+        pageDescription.setText("Cập nhật thông tin phòng");
+
+        contentPanel.removeAll();
+        contentPanel.add(new AddRoomPanel(room, this::showRoomManagement), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
     }
 
     // =========================================================
