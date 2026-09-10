@@ -46,6 +46,8 @@ CREATE TABLE rooms (
         'CLEANING',
         'MAINTENANCE'
     ) NOT NULL DEFAULT 'AVAILABLE',
+    image_path JSON,
+    amenities JSON,
     note VARCHAR(255),
 
     CONSTRAINT fk_rooms_room_type
