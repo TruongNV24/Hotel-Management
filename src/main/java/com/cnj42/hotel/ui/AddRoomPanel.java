@@ -541,7 +541,13 @@ public class AddRoomPanel extends JPanel {
         cancelBtn.setForeground(TEXT_DARK);
         cancelBtn.setFocusPainted(false);
         cancelBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        cancelBtn.addActionListener(e -> resetForm());
+        cancelBtn.addActionListener(e -> {
+            if (onSaved != null) {
+                onSaved.run();
+            } else {
+                resetForm();
+            }
+        });
 
         JButton saveBtn = new RoundedButton(editingRoom == null ? "Lưu phòng" : "Lưu thay đổi", PRIMARY, WHITE, PRIMARY);
         saveBtn.setPreferredSize(new Dimension(140, 38));
