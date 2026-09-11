@@ -72,11 +72,13 @@ public class MainFrame extends JFrame {
     private JLabel availableRoomsLabel;
     private JLabel occupiedRoomsLabel;
     private JLabel reservationsLabel;
+    private JLabel maintenanceRoomsLabel;
 
     private JLabel totalRoomsDesc;
     private JLabel availableRoomsDesc;
     private JLabel occupiedRoomsDesc;
     private JLabel reservationsDesc;
+    private JLabel maintenanceRoomsDesc;
 
     private JLabel revenueTotalLabel;
     private JLabel revenueChangeLabel;
@@ -285,6 +287,19 @@ public class MainFrame extends JFrame {
             }
         });
 
+        iconLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                action.run();
+            }
+        });
+        textLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                action.run();
+            }
+        });
+
         parent.add(button);
         parent.add(Box.createVerticalStrut(4));
     }
@@ -442,23 +457,26 @@ public class MainFrame extends JFrame {
 
     private JPanel createStatistics() {
 
-        JPanel panel = new JPanel(new GridLayout(1, 4, 18, 0));
+        JPanel panel = new JPanel(new GridLayout(1, 5, 18, 0));
         panel.setOpaque(false);
 
         totalRoomsLabel = new JLabel("0");
         availableRoomsLabel = new JLabel("0");
         occupiedRoomsLabel = new JLabel("0");
         reservationsLabel = new JLabel("0");
+        maintenanceRoomsLabel = new JLabel("0");
 
         totalRoomsDesc = new JLabel("Tất cả phòng");
         availableRoomsDesc = new JLabel("0% tổng số phòng");
         occupiedRoomsDesc = new JLabel("0% tổng số phòng");
         reservationsDesc = new JLabel("0% tổng số phòng");
+        maintenanceRoomsDesc = new JLabel("0% tổng số phòng");
 
         panel.add(createStatCard("TỔNG PHÒNG", totalRoomsLabel, totalRoomsDesc, "building", PRIMARY));
         panel.add(createStatCard("PHÒNG TRỐNG", availableRoomsLabel, availableRoomsDesc, "check", GREEN));
         panel.add(createStatCard("ĐANG SỬ DỤNG", occupiedRoomsLabel, occupiedRoomsDesc, "person", ORANGE));
-        panel.add(createStatCard("ĐẶT PHÒNG", reservationsLabel, reservationsDesc, "calendar", BLUE));
+        panel.add(createStatCard("ĐẶT TRƯỚC", reservationsLabel, reservationsDesc, "calendar", BLUE));
+        panel.add(createStatCard("BẢO TRÌ / DỌN DẸP", maintenanceRoomsLabel, maintenanceRoomsDesc, "building", RED));
 
         return panel;
     }
@@ -745,7 +763,7 @@ public class MainFrame extends JFrame {
             }
 
             int startAngle = 90;
-            Color[] colors = {GREEN, ORANGE, PRIMARY, RED, GRAY};
+            Color[] colors = {GREEN, ORANGE, BLUE, RED, GRAY};
 
             if (total > 0) {
                 for (int i = 0; i < values.length; i++) {
@@ -859,8 +877,12 @@ public class MainFrame extends JFrame {
 
     private void loadRoomStatus(JPanel container) {
 
-        String sql = "SELECT room_number, status " +
-                "FROM rooms " +
+        String sql = "SELECT room_number, " +
+            "CASE WHEN rooms.status = 'AVAILABLE' AND EXISTS (" +
+            "SELECT 1 FROM reservations res WHERE res.room_id = rooms.room_id " +
+            "AND res.status IN ('PENDING', 'CONFIRMED')) THEN 'RESERVED' " +
+            "ELSE rooms.status END AS status " +
+            "FROM rooms " +
                 "ORDER BY room_number";
 
         try (
@@ -1240,7 +1262,9 @@ public class MainFrame extends JFrame {
             int total = data.getTotalRooms();
             int available = data.getAvailableRooms();
             int occupied = data.getOccupiedRooms();
-            int reservations = data.getActiveReservations();
+            int[] roomStatusValues = data.getRoomStatusSummary();
+            int reservations = roomStatusValues[2];
+            int maintenance = roomStatusValues[3] + roomStatusValues[4];
 
             totalRoomsLabel.setText(String.valueOf(total));
             availableRoomsLabel.setText(String.valueOf(available));
@@ -1251,8 +1275,8 @@ public class MainFrame extends JFrame {
             availableRoomsDesc.setText(formatPercentDesc(available, total));
             occupiedRoomsDesc.setText(formatPercentDesc(occupied, total));
             reservationsDesc.setText(formatPercentDesc(reservations, total));
-
-            int[] roomStatusValues = data.getRoomStatusSummary();
+            maintenanceRoomsLabel.setText(String.valueOf(maintenance));
+            maintenanceRoomsDesc.setText(formatPercentDesc(maintenance, total));
             donutChartPanel.setValues(roomStatusValues);
             refreshRoomLegend(roomStatusValues);
 
@@ -1303,7 +1327,7 @@ public class MainFrame extends JFrame {
         }
 
         String[] labels = {"Trống", "Đang ở", "Đặt trước", "Bảo trì", "Dọn dẹp"};
-        Color[] colors = {GREEN, ORANGE, PRIMARY, RED, GRAY};
+        Color[] colors = {GREEN, ORANGE, BLUE, RED, GRAY};
 
         for (int i = 0; i < labels.length; i++) {
             double percent = total > 0 ? (values[i] * 100.0 / total) : 0.0;
@@ -1651,7 +1675,7 @@ public class MainFrame extends JFrame {
         return switch (status.toUpperCase()) {
             case "AVAILABLE" -> GREEN;
             case "OCCUPIED" -> ORANGE;
-            case "BOOKED" -> BLUE;
+            case "BOOKED", "RESERVED" -> BLUE;
             case "MAINTENANCE" -> RED;
             case "CLEANING" -> GRAY;
             default -> GRAY;
@@ -1667,7 +1691,7 @@ public class MainFrame extends JFrame {
         return switch (status.toUpperCase()) {
             case "AVAILABLE" -> "🛏";
             case "OCCUPIED" -> "👤";
-            case "BOOKED" -> "📅";
+            case "BOOKED", "RESERVED" -> "📅";
             case "MAINTENANCE" -> "🔧";
             case "CLEANING" -> "✨";
             default -> "🛏";
@@ -1683,7 +1707,7 @@ public class MainFrame extends JFrame {
         return switch (status.toUpperCase()) {
             case "AVAILABLE" -> "Trống";
             case "OCCUPIED" -> "Đang ở";
-            case "BOOKED" -> "Đặt trước";
+            case "BOOKED", "RESERVED" -> "Đặt trước";
             case "MAINTENANCE" -> "Bảo trì";
             case "CLEANING" -> "Dọn dẹp";
             default -> status;
@@ -1772,7 +1796,7 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Tạo mới thông tin phòng");
 
         contentPanel.removeAll();
-        contentPanel.add(new AddRoomPanel(), BorderLayout.CENTER);
+        contentPanel.add(new AddRoomPanel(null, this::showRoomManagement), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }

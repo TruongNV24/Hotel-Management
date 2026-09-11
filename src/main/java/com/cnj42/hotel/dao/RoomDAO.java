@@ -14,7 +14,11 @@ import java.util.List;
 public class RoomDAO {
 
     public List<Room> getAllRoomsWithType() throws SQLException {
-        String sql = "SELECT r.room_id, r.room_number, r.room_type_id, r.floor, r.status, r.image_path, r.amenities, r.note, " +
+        String sql = "SELECT r.room_id, r.room_number, r.room_type_id, r.floor, " +
+            "CASE WHEN r.status = 'AVAILABLE' AND EXISTS (" +
+            "SELECT 1 FROM reservations res WHERE res.room_id = r.room_id " +
+            "AND res.status IN ('PENDING', 'CONFIRMED')) THEN 'RESERVED' ELSE r.status END AS status, " +
+            "r.image_path, r.amenities, r.note, " +
                 "rt.type_name, rt.description, rt.capacity, rt.price_per_night, rt.status as type_status " +
                 "FROM rooms r " +
                 "JOIN room_types rt ON r.room_type_id = rt.room_type_id " +
@@ -55,7 +59,11 @@ public class RoomDAO {
 
     public List<Room> searchRooms(String keyword, String status) throws SQLException {
         StringBuilder sql = new StringBuilder(
-                "SELECT r.room_id, r.room_number, r.room_type_id, r.floor, r.status, r.image_path, r.amenities, r.note, " +
+                "SELECT r.room_id, r.room_number, r.room_type_id, r.floor, " +
+                "CASE WHEN r.status = 'AVAILABLE' AND EXISTS (" +
+                "SELECT 1 FROM reservations res WHERE res.room_id = r.room_id " +
+                "AND res.status IN ('PENDING', 'CONFIRMED')) THEN 'RESERVED' ELSE r.status END AS status, " +
+                "r.image_path, r.amenities, r.note, " +
                 "rt.type_name, rt.description, rt.capacity, rt.price_per_night, rt.status as type_status " +
                 "FROM rooms r " +
                 "JOIN room_types rt ON r.room_type_id = rt.room_type_id " +
@@ -67,7 +75,13 @@ public class RoomDAO {
         }
 
         if (status != null && !status.isEmpty() && !status.equals("TẤT CẢ")) {
-            sql.append(" AND r.status = ?");
+            if ("RESERVED".equals(status)) {
+                sql.append(" AND (r.status = 'RESERVED' OR (r.status = 'AVAILABLE' AND EXISTS (")
+                        .append("SELECT 1 FROM reservations res WHERE res.room_id = r.room_id ")
+                        .append("AND res.status IN ('PENDING', 'CONFIRMED'))))");
+            } else {
+                sql.append(" AND r.status = ?");
+            }
         }
 
         sql.append(" ORDER BY r.room_number ASC");
@@ -85,7 +99,7 @@ public class RoomDAO {
                 stmt.setString(paramIndex++, searchKey);
             }
 
-            if (status != null && !status.isEmpty() && !status.equals("TẤT CẢ")) {
+            if (status != null && !status.isEmpty() && !status.equals("TẤT CẢ") && !"RESERVED".equals(status)) {
                 stmt.setString(paramIndex++, status);
             }
 
