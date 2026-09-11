@@ -19,7 +19,10 @@ public class DashboardDAO {
             DashboardData data = new DashboardData();
 
             data.setTotalRooms(executeCount(conn, "SELECT COUNT(*) FROM rooms"));
-            data.setAvailableRooms(executeCount(conn, "SELECT COUNT(*) FROM rooms WHERE status = 'AVAILABLE'"));
+                data.setAvailableRooms(executeCount(conn,
+                    "SELECT COUNT(*) FROM rooms r WHERE r.status = 'AVAILABLE' AND NOT EXISTS (" +
+                        "SELECT 1 FROM reservations res WHERE res.room_id = r.room_id " +
+                        "AND res.status IN ('PENDING', 'CONFIRMED'))"));
             data.setOccupiedRooms(executeCount(conn, "SELECT COUNT(*) FROM rooms WHERE status = 'OCCUPIED'"));
             data.setActiveReservations(executeCount(conn, "SELECT COUNT(*) FROM reservations WHERE status IN ('PENDING', 'CONFIRMED')"));
             data.setRoomStatusSummary(getRoomStatusSummary(conn));
@@ -39,14 +42,18 @@ public class DashboardDAO {
     }
 
     private int[] getRoomStatusSummary(Connection conn) throws SQLException {
-        String sql = "SELECT status, COUNT(*) AS total FROM rooms GROUP BY status";
+        String sql = "SELECT effective_status, COUNT(*) AS total FROM (" +
+            "SELECT CASE WHEN r.status = 'AVAILABLE' AND EXISTS (" +
+            "SELECT 1 FROM reservations res WHERE res.room_id = r.room_id " +
+            "AND res.status IN ('PENDING', 'CONFIRMED')) THEN 'RESERVED' ELSE r.status END AS effective_status " +
+            "FROM rooms r) room_statuses GROUP BY effective_status";
         int[] values = new int[]{0, 0, 0, 0, 0};
 
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
-                String status = rs.getString("status");
+                String status = rs.getString("effective_status");
                 int count = rs.getInt("total");
 
                 switch (status == null ? "" : status.toUpperCase()) {
