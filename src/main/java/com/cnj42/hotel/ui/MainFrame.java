@@ -198,17 +198,17 @@ public class MainFrame extends JFrame {
 
         addSectionTitle(menu, "QUẢN LÝ");
 
-        addMenuButton(menu, "🛏", "Quản lý phòng", false, this::showRoomManagement);
-        addMenuButton(menu, "🏷", "Loại phòng", false, () -> openModule("Loại phòng"));
-        addMenuButton(menu, "👤", "Khách hàng", false, () -> openModule("Khách hàng"));
-        addMenuButton(menu, "📅", "Đặt phòng", false, () -> openModule("Đặt phòng"));
-        addMenuButton(menu, "🧳", "Lưu trú", false, () -> openModule("Quản lý lưu trú"));
+        addMenuButton(menu, "🛏", "Quản lý danh mục phòng", false, this::showRoomManagement);
+        if (currentUser != null && "ADMIN".equalsIgnoreCase(currentUser.getRole())) {
+            addMenuButton(menu, "👤", "Quản lý tài khoản", false, this::showAccountManagement);
+        } else {
+            addMenuButton(menu, "👤", "Quản lý tài khoản", false, () -> JOptionPane.showMessageDialog(this, "Bạn không có quyền truy cập tính năng này", "Không đủ quyền", JOptionPane.WARNING_MESSAGE));
+        }
+        addMenuButton(menu, "🧳", "Quản lý lưu trú", false, this::showReservationManagement);
 
         addSectionTitle(menu, "DỊCH VỤ");
-
-        addMenuButton(menu, "🍽", "Dịch vụ", false, () -> openModule("Dịch vụ"));
-        addMenuButton(menu, "🧾", "Hóa đơn", false, () -> openModule("Hóa đơn"));
-        addMenuButton(menu, "💳", "Thanh toán", false, () -> openModule("Thanh toán"));
+        addMenuButton(menu, "💳", "Quản lý thanh toán", false, this::showPaymentManagement);
+        addMenuButton(menu, "🧾", "Báo cáo, Thống kê", false, () -> openModule("Hóa đơn"));
 
         sidebar.add(menu, BorderLayout.CENTER);
 
@@ -1096,41 +1096,67 @@ public class MainFrame extends JFrame {
         }
     }
 
-    private void ensureRoomImageColumn(Connection conn) throws SQLException {
+    private void ensureRoomImageColumn(Connection conn) {
         String sql = "SELECT data_type FROM information_schema.columns " +
                 "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'image_path'";
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
+        try {
+            try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             if (!rs.next()) {
-                try (Statement alter = conn.createStatement()) {
-                    alter.executeUpdate("ALTER TABLE rooms ADD COLUMN image_path JSON AFTER status");
+                try {
+                    try (Statement alter = conn.createStatement()) {
+                        alter.executeUpdate("ALTER TABLE rooms ADD COLUMN image_path JSON AFTER status");
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Warning: failed to add image_path column: " + e.getMessage());
                 }
             } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
-                try (Statement alter = conn.createStatement()) {
-                    alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON " +
-                            "USING (CASE WHEN image_path IS NULL OR TRIM(image_path) = '' " +
-                            "THEN NULL ELSE JSON_ARRAY(image_path) END)");
+                try {
+                    try (Statement alter = conn.createStatement()) {
+                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON " +
+                                "USING (CASE WHEN image_path IS NULL OR TRIM(image_path) = '' " +
+                                "THEN NULL ELSE JSON_ARRAY(image_path) END)");
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Warning: failed to modify image_path column to JSON: " + e.getMessage());
                 }
             }
+            }
+        } catch (SQLException e) {
+            System.err.println("Warning: unable to inspect/alter image_path column: " + e.getMessage());
+            return;
         }
     }
 
-    private void ensureRoomAmenitiesColumn(Connection conn) throws SQLException {
+    private void ensureRoomAmenitiesColumn(Connection conn) {
         String sql = "SELECT data_type FROM information_schema.columns " +
                 "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'amenities'";
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
+        try {
+            try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             if (!rs.next()) {
-                try (Statement alter = conn.createStatement()) {
-                    alter.executeUpdate("ALTER TABLE rooms ADD COLUMN amenities JSON AFTER image_path");
+                try {
+                    try (Statement alter = conn.createStatement()) {
+                        alter.executeUpdate("ALTER TABLE rooms ADD COLUMN amenities JSON AFTER image_path");
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Warning: failed to add amenities column: " + e.getMessage());
                 }
             } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
-                try (Statement alter = conn.createStatement()) {
-                    alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON " +
-                            "USING (CASE WHEN amenities IS NULL OR TRIM(amenities) = '' " +
-                            "THEN NULL ELSE JSON_ARRAY(amenities) END)");
+                try {
+                    try (Statement alter = conn.createStatement()) {
+                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON " +
+                                "USING (CASE WHEN amenities IS NULL OR TRIM(amenities) = '' " +
+                                "THEN NULL ELSE JSON_ARRAY(amenities) END)");
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Warning: failed to modify amenities column to JSON: " + e.getMessage());
                 }
             }
+            }
+        } catch (SQLException e) {
+            System.err.println("Warning: unable to inspect/alter amenities column: " + e.getMessage());
+            return;
         }
     }
 
@@ -1747,6 +1773,36 @@ public class MainFrame extends JFrame {
 
         contentPanel.removeAll();
         contentPanel.add(new AddRoomPanel(), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showAccountManagement() {
+        pageTitle.setText("Quản lý tài khoản");
+        pageDescription.setText("Quản lý người dùng hệ thống");
+
+        contentPanel.removeAll();
+        contentPanel.add(new AccountManagerPanel(), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showReservationManagement() {
+        pageTitle.setText("Quản lý lưu trú");
+        pageDescription.setText("Quản lý đặt phòng, check-in, check-out");
+
+        contentPanel.removeAll();
+        contentPanel.add(new ReservationManagerPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showPaymentManagement() {
+        pageTitle.setText("Quản lý thanh toán");
+        pageDescription.setText("Lập hóa đơn, thanh toán và in hóa đơn");
+
+        contentPanel.removeAll();
+        contentPanel.add(new PaymentManagerPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
