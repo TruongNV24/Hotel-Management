@@ -285,6 +285,19 @@ public class MainFrame extends JFrame {
             }
         });
 
+        iconLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                action.run();
+            }
+        });
+        textLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                action.run();
+            }
+        });
+
         parent.add(button);
         parent.add(Box.createVerticalStrut(4));
     }
@@ -1746,7 +1759,7 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Tạo mới thông tin phòng");
 
         contentPanel.removeAll();
-        contentPanel.add(new AddRoomPanel(), BorderLayout.CENTER);
+        contentPanel.add(new AddRoomPanel(null, this::showRoomManagement), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }

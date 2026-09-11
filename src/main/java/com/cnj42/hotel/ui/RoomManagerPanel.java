@@ -258,7 +258,23 @@ public class RoomManagerPanel extends JPanel {
         table.getColumnModel().getColumn(1).setCellRenderer(new RoomImageRenderer());
         table.getColumnModel().getColumn(5).setCellRenderer(new StatusRenderer());
         table.getColumnModel().getColumn(7).setCellRenderer(new ActionRenderer());
-        table.getColumnModel().getColumn(7).setCellEditor(new ActionEditor(editRoomAction, this::deleteRoom));
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                int row = table.rowAtPoint(event.getPoint());
+                int column = table.columnAtPoint(event.getPoint());
+                if (row < 0 || column != 7) return;
+
+                Room room = (Room) tableModel.getValueAt(table.convertRowIndexToModel(row), 7);
+                Rectangle cell = table.getCellRect(row, column, false);
+                int buttonStart = cell.x + (cell.width - 128) / 2;
+                if (event.getX() < buttonStart + 64) {
+                    editRoomAction.accept(room);
+                } else if (event.getX() < buttonStart + 128) {
+                    deleteRoom(room);
+                }
+            }
+        });
         return table;
     }
 
