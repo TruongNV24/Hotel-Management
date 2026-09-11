@@ -50,10 +50,12 @@ public class RoomManagerPanel extends JPanel {
     private final JLabel totalLabel = new JLabel("0");
     private final JLabel availableLabel = new JLabel("0");
     private final JLabel occupiedLabel = new JLabel("0");
+    private final JLabel reservedLabel = new JLabel("0");
     private final JLabel maintenanceLabel = new JLabel("0");
     
     private final JLabel availableSub = new JLabel("0.0% tổng số phòng");
     private final JLabel occupiedSub = new JLabel("0.0% tổng số phòng");
+    private final JLabel reservedSub = new JLabel("0.0% tổng số phòng");
     private final JLabel maintenanceSub = new JLabel("0.0% tổng số phòng");
 
     public RoomManagerPanel() {
@@ -82,11 +84,12 @@ public class RoomManagerPanel extends JPanel {
     }
 
     private JPanel createSummary() {
-        JPanel summary = new JPanel(new GridLayout(1, 4, 20, 0));
+        JPanel summary = new JPanel(new GridLayout(1, 5, 16, 0));
         summary.setOpaque(false);
         summary.add(statCard("TỔNG SỐ PHÒNG", "Tất cả phòng", totalLabel, null, PRIMARY, 0));
         summary.add(statCard("PHÒNG TRỐNG", "", availableLabel, availableSub, GREEN, 1));
         summary.add(statCard("ĐANG SỬ DỤNG", "", occupiedLabel, occupiedSub, ORANGE, 2));
+        summary.add(statCard("ĐẶT TRƯỚC", "", reservedLabel, reservedSub, BLUE, 2));
         summary.add(statCard("BẢO TRÌ / DỌN DẸP", "", maintenanceLabel, maintenanceSub, RED, 3));
         return summary;
     }
@@ -292,14 +295,15 @@ public class RoomManagerPanel extends JPanel {
         String selectedType = (String) typeFilter.getSelectedItem();
         tableModel.setRowCount(0);
         
-        int available = 0, occupied = 0, maintenance = 0;
+        int available = 0, occupied = 0, reserved = 0, maintenance = 0;
         
         for (Room room : rooms) {
             String typeName = room.getRoomType() == null ? "" : room.getRoomType().getTypeName();
             if (selectedType != null && !"Tất cả".equals(selectedType) && !selectedType.equals(typeName)) continue;
             
             if ("AVAILABLE".equals(room.getStatus())) available++;
-            if ("OCCUPIED".equals(room.getStatus()) || "RESERVED".equals(room.getStatus())) occupied++;
+            if ("OCCUPIED".equals(room.getStatus())) occupied++;
+            if ("RESERVED".equals(room.getStatus())) reserved++;
             if ("MAINTENANCE".equals(room.getStatus()) || "CLEANING".equals(room.getStatus())) maintenance++;
             
             double price = room.getRoomType() == null ? 0 : room.getRoomType().getPricePerNight();
@@ -319,15 +323,18 @@ public class RoomManagerPanel extends JPanel {
         totalLabel.setText(String.valueOf(total));
         availableLabel.setText(String.valueOf(available));
         occupiedLabel.setText(String.valueOf(occupied));
+        reservedLabel.setText(String.valueOf(reserved));
         maintenanceLabel.setText(String.valueOf(maintenance));
         
         if (total > 0) {
             availableSub.setText(String.format("%.1f%% tổng số phòng", (available * 100.0) / total));
             occupiedSub.setText(String.format("%.1f%% tổng số phòng", (occupied * 100.0) / total));
+            reservedSub.setText(String.format("%.1f%% tổng số phòng", (reserved * 100.0) / total));
             maintenanceSub.setText(String.format("%.1f%% tổng số phòng", (maintenance * 100.0) / total));
         } else {
             availableSub.setText("0.0% tổng số phòng");
             occupiedSub.setText("0.0% tổng số phòng");
+            reservedSub.setText("0.0% tổng số phòng");
             maintenanceSub.setText("0.0% tổng số phòng");
         }
     }
