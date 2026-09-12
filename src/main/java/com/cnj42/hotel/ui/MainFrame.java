@@ -66,6 +66,7 @@ public class MainFrame extends JFrame {
     private JPanel contentPanel;
     private JLabel pageTitle;
     private JLabel pageDescription;
+    private JPanel activeMenuButton;
 
     // Dashboard statistics
     private JLabel totalRoomsLabel;
@@ -210,7 +211,7 @@ public class MainFrame extends JFrame {
 
         addSectionTitle(menu, "DỊCH VỤ");
         addMenuButton(menu, "💳", "Quản lý thanh toán", false, this::showPaymentManagement);
-        addMenuButton(menu, "🧾", "Báo cáo, Thống kê", false, () -> openModule("Hóa đơn"));
+        addMenuButton(menu, "🧾", "Báo cáo, Thống kê", false, this::showReports);
 
         sidebar.add(menu, BorderLayout.CENTER);
 
@@ -237,18 +238,16 @@ public class MainFrame extends JFrame {
 
     private void addMenuButton(JPanel parent, String icon, String text, boolean selected, Runnable action) {
 
-        JPanel button = selected
-                ? new RoundedPanel(PRIMARY, 10)
-                : new JPanel();
+        JPanel button = new RoundedPanel(selected ? PRIMARY : SIDEBAR, 10);
+
+        if (selected) {
+            activeMenuButton = button;
+        }
 
         button.setLayout(new BorderLayout());
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
         button.setPreferredSize(new Dimension(0, 45));
         button.setBorder(new EmptyBorder(0, 12, 0, 10));
-
-        if (!selected) {
-            button.setBackground(SIDEBAR);
-        }
 
         JLabel iconLabel = new JLabel(icon);
         iconLabel.setPreferredSize(new Dimension(30, 0));
@@ -269,20 +268,21 @@ public class MainFrame extends JFrame {
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                if (!selected) {
-                    button.setBackground(SIDEBAR_HOVER);
+                if (button != activeMenuButton) {
+                    ((RoundedPanel) button).setBackgroundColor(SIDEBAR_HOVER);
                 }
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                if (!selected) {
-                    button.setBackground(SIDEBAR);
+                if (button != activeMenuButton) {
+                    ((RoundedPanel) button).setBackgroundColor(SIDEBAR);
                 }
             }
 
             @Override
             public void mouseClicked(MouseEvent e) {
+                selectMenuButton(button);
                 action.run();
             }
         });
@@ -290,18 +290,34 @@ public class MainFrame extends JFrame {
         iconLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                selectMenuButton(button);
                 action.run();
             }
         });
         textLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                selectMenuButton(button);
                 action.run();
             }
         });
 
         parent.add(button);
         parent.add(Box.createVerticalStrut(4));
+    }
+
+    private void selectMenuButton(JPanel button) {
+        if (activeMenuButton == button) {
+            return;
+        }
+
+        if (activeMenuButton instanceof RoundedPanel) {
+            ((RoundedPanel) activeMenuButton).setBackgroundColor(SIDEBAR);
+        }
+
+        activeMenuButton = button;
+        ((RoundedPanel) button).setBackgroundColor(PRIMARY);
+        button.repaint();
     }
 
     private void addSectionTitle(JPanel parent, String text) {
@@ -1831,6 +1847,34 @@ public class MainFrame extends JFrame {
         contentPanel.repaint();
     }
 
+    private void showReports() {
+        pageTitle.setText("Báo cáo, thống kê");
+        pageDescription.setText("Theo dõi doanh thu và tình hình đặt phòng");
+
+        try {
+            JPanel reportPanel = new ReportPanel();
+            contentPanel.removeAll();
+            contentPanel.add(reportPanel, BorderLayout.CENTER);
+            contentPanel.revalidate();
+            contentPanel.repaint();
+        } catch (Throwable exception) {
+            showReportError(exception);
+        }
+    }
+
+    private void showReportError(Throwable exception) {
+        contentPanel.removeAll();
+        JPanel errorPanel = new JPanel(new GridBagLayout());
+        errorPanel.setBackground(BACKGROUND);
+        JLabel errorLabel = new JLabel("Không thể mở trang báo cáo: " + exception.getMessage());
+        errorLabel.setForeground(RED);
+        errorPanel.add(errorLabel);
+        contentPanel.add(errorPanel, BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+        exception.printStackTrace();
+    }
+
     private void showEditRoom(com.cnj42.hotel.model.Room room) {
         pageTitle.setText("Sửa phòng");
         pageDescription.setText("Cập nhật thông tin phòng");
@@ -1888,13 +1932,18 @@ public class MainFrame extends JFrame {
 
     private static class RoundedPanel extends JPanel {
 
-        private final Color backgroundColor;
+        private Color backgroundColor;
         private final int radius;
 
         public RoundedPanel(Color backgroundColor, int radius) {
             this.backgroundColor = backgroundColor;
             this.radius = radius;
             setOpaque(false);
+        }
+
+        public void setBackgroundColor(Color backgroundColor) {
+            this.backgroundColor = backgroundColor;
+            repaint();
         }
 
         @Override
