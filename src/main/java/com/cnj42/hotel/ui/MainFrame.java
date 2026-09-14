@@ -1829,10 +1829,10 @@ public class MainFrame extends JFrame {
 
     private void showReservationManagement() {
         pageTitle.setText("Quản lý lưu trú");
-        pageDescription.setText("Quản lý đặt phòng, check-in, check-out");
+        pageDescription.setText("Quản lý quá trình nhận phòng, lưu trú và trả phòng của khách");
 
         contentPanel.removeAll();
-        contentPanel.add(new ReservationManagerPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
+        contentPanel.add(new StayManagementPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
