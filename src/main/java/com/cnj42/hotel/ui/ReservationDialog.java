@@ -94,7 +94,7 @@ public class ReservationDialog extends JDialog {
     }
 
     private void loadRooms() {
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement("SELECT room_id, room_number FROM rooms WHERE status IN ('AVAILABLE','RESERVED') ORDER BY room_number"); ResultSet rs = ps.executeQuery()) {
+        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement("SELECT room_id, room_number FROM rooms WHERE status = 'AVAILABLE' ORDER BY room_number"); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) roomBox.addItem(new Item(rs.getInt(1), rs.getString(2)));
         } catch (SQLException e) { System.err.println("Lỗi load rooms: " + e.getMessage()); }
     }
@@ -122,6 +122,22 @@ public class ReservationDialog extends JDialog {
             String out = checkOutField.getText().trim();
             int num = Integer.parseInt(guestsField.getText().trim());
             String note = noteField.getText().trim();
+            if (guest == null || room == null) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn khách và phòng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (num <= 0) {
+                JOptionPane.showMessageDialog(this, "Số khách phải lớn hơn 0.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (in.isEmpty() || out.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Vui lòng nhập ngày nhận phòng và trả phòng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (!reservationService.isRoomAvailable(room.id, in, out, reservationId)) {
+                JOptionPane.showMessageDialog(this, "Phòng này đã có đặt phòng hoặc lưu trú trong khoảng thời gian đã chọn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
             if (reservationId == null) {
                 int id = reservationService.createReservation(guest.id, room.id, in, out, num, note, createdBy);
                 if (id > 0) { saved=true; dispose(); return; }

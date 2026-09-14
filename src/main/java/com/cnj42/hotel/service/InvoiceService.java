@@ -127,34 +127,41 @@ public class InvoiceService {
         String insertPayment = "INSERT INTO payments (invoice_id, amount, payment_method, note, received_by) VALUES (?, ?, ?, ?, ?)";
         String updateInvoicePaid = "UPDATE invoices SET status = 'PAID' WHERE invoice_id = ?";
         String updateInvoicePartial = "UPDATE invoices SET status = 'PARTIALLY_PAID' WHERE invoice_id = ?";
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement p1 = conn.prepareStatement(insertPayment)) {
-            conn.setAutoCommit(false);
-            p1.setInt(1, invoiceId);
-            p1.setDouble(2, amount);
-            p1.setString(3, method);
-            p1.setString(4, "");
-            if (receivedBy != null) p1.setInt(5, receivedBy); else p1.setNull(5, Types.INTEGER);
-            p1.executeUpdate();
-            // determine total payments vs invoice amount
-            String sumSql = "SELECT COALESCE(SUM(amount),0) as paid FROM payments WHERE invoice_id = ?";
-            double paid = 0.0;
-            try (PreparedStatement ps = conn.prepareStatement(sumSql)) {
-                ps.setInt(1, invoiceId);
-                try (ResultSet rs = ps.executeQuery()) { if (rs.next()) paid = rs.getDouble("paid"); }
+        Connection conn = null;
+        try {
+            conn = DBConnection.getConnection();
+            try (PreparedStatement p1 = conn.prepareStatement(insertPayment)) {
+                conn.setAutoCommit(false);
+                p1.setInt(1, invoiceId);
+                p1.setDouble(2, amount);
+                p1.setString(3, method);
+                p1.setString(4, "");
+                if (receivedBy != null) p1.setInt(5, receivedBy); else p1.setNull(5, Types.INTEGER);
+                p1.executeUpdate();
+                // determine total payments vs invoice amount
+                String sumSql = "SELECT COALESCE(SUM(amount),0) as paid FROM payments WHERE invoice_id = ?";
+                double paid = 0.0;
+                try (PreparedStatement ps = conn.prepareStatement(sumSql)) {
+                    ps.setInt(1, invoiceId);
+                    try (ResultSet rs = ps.executeQuery()) { if (rs.next()) paid = rs.getDouble("paid"); }
+                }
+                double total = 0.0;
+                try (PreparedStatement ps2 = conn.prepareStatement("SELECT total_amount FROM invoices WHERE invoice_id = ?")) {
+                    ps2.setInt(1, invoiceId);
+                    try (ResultSet rs2 = ps2.executeQuery()) { if (rs2.next()) total = rs2.getDouble(1); }
+                }
+                if (paid >= total) {
+                    try (PreparedStatement upd = conn.prepareStatement(updateInvoicePaid)) { upd.setInt(1, invoiceId); upd.executeUpdate(); }
+                } else {
+                    try (PreparedStatement upd = conn.prepareStatement(updateInvoicePartial)) { upd.setInt(1, invoiceId); upd.executeUpdate(); }
+                }
+                conn.commit();
+                return true;
             }
-            double total = 0.0;
-            try (PreparedStatement ps2 = conn.prepareStatement("SELECT total_amount FROM invoices WHERE invoice_id = ?")) {
-                ps2.setInt(1, invoiceId);
-                try (ResultSet rs2 = ps2.executeQuery()) { if (rs2.next()) total = rs2.getDouble(1); }
-            }
-            if (paid >= total) {
-                try (PreparedStatement upd = conn.prepareStatement(updateInvoicePaid)) { upd.setInt(1, invoiceId); upd.executeUpdate(); }
-            } else {
-                try (PreparedStatement upd = conn.prepareStatement(updateInvoicePartial)) { upd.setInt(1, invoiceId); upd.executeUpdate(); }
-            }
-            conn.commit();
-            return true;
         } catch (SQLException e) {
+            if (conn != null) {
+                try { conn.rollback(); } catch (SQLException rollbackEx) { System.err.println("Lỗi rollback payment: " + rollbackEx.getMessage()); }
+            }
             System.err.println("Lỗi confirm payment: " + e.getMessage());
             return false;
         }

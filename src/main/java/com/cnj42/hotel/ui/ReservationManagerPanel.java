@@ -55,13 +55,12 @@ public class ReservationManagerPanel extends JPanel {
         table.getColumnModel().getColumn(7).setCellRenderer((tbl,value,isSel,hasFocus,row,col) -> {
             JPanel p = new JPanel(new FlowLayout(FlowLayout.CENTER,6,6));
             JButton edit = new JButton("Sửa"); JButton cancel = new JButton("Hủy"); JButton checkin = new JButton("Check-in"); JButton checkout = new JButton("Check-out");
-            // determine enabled state from reservation value
             if (value instanceof com.cnj42.hotel.model.Reservation) {
                 com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation) value;
                 String st = rr.getStatus();
                 edit.setEnabled(!"CANCELLED".equals(st) && !"COMPLETED".equals(st));
                 cancel.setEnabled(!"CANCELLED".equals(st) && !"COMPLETED".equals(st));
-                checkin.setEnabled("CONFIRMED".equals(st));
+                checkin.setEnabled("PENDING".equals(st) || "CONFIRMED".equals(st));
                 checkout.setEnabled("CHECKED_IN".equals(st));
             }
             p.add(edit); p.add(cancel); p.add(checkin); p.add(checkout);
@@ -117,7 +116,7 @@ public class ReservationManagerPanel extends JPanel {
                     if (g == null || r == null) { JOptionPane.showMessageDialog(d, "Chọn khách và phòng"); return; }
                     int rid = reservationService.walkInCheckIn(g.id, r.id, num, note, currentUserId);
                     if (rid > 0) { JOptionPane.showMessageDialog(d, "Khách đã nhận phòng. Reservation ID=" + rid); d.dispose(); refreshReservations(); }
-                    else JOptionPane.showMessageDialog(d, "Check-in thất bại");
+                    else JOptionPane.showMessageDialog(d, "Check-in thất bại. Phòng không còn trống hoặc dữ liệu không hợp lệ.");
             } catch (Exception ex) { JOptionPane.showMessageDialog(d, "Dữ liệu không hợp lệ"); }
         });
         cancel.addActionListener(e -> d.dispose());
@@ -135,24 +134,12 @@ public class ReservationManagerPanel extends JPanel {
         ReservationActionEditor() {
             panel.add(edit); panel.add(cancel); panel.add(checkin); panel.add(checkout);
             edit.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); ReservationDialog dlg = new ReservationDialog(SwingUtilities.getWindowAncestor(panel), id, currentUserId); dlg.setVisible(true); if (dlg.isSaved()) refreshReservations(); });
-            cancel.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); if (reservationService.cancelReservation(id, roomId)) refreshReservations(); });
-            checkin.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); boolean ok = (currentUserId!=null) ? reservationService.checkIn(id, roomId, currentUserId) : reservationService.checkIn(id, roomId); if (ok) refreshReservations(); });
-            checkout.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); boolean ok = (currentUserId!=null) ? reservationService.checkOut(id, roomId, currentUserId) : reservationService.checkOut(id, roomId); if (ok) {
-                    refreshReservations();
-                    Integer stayId = reservationService.getLatestStayIdForReservation(id);
-                    if (stayId != null) {
-                        int choice = JOptionPane.showConfirmDialog(panel, "Khách trả phòng. Bạn muốn lập hóa đơn ngay?", "Check-out", JOptionPane.YES_NO_OPTION);
-                        if (choice == JOptionPane.YES_OPTION) {
-                            com.cnj42.hotel.service.InvoiceService inv = new com.cnj42.hotel.service.InvoiceService();
-                            int invId = inv.createInvoiceForStay(stayId, currentUserId, 0.0);
-                            if (invId > 0) JOptionPane.showMessageDialog(panel, "Đã tạo hóa đơn ID=" + invId);
-                            else JOptionPane.showMessageDialog(panel, "Tạo hóa đơn thất bại", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                } });
+            cancel.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); if (reservationService.cancelReservation(id, roomId)) { JOptionPane.showMessageDialog(panel, "Đã hủy đặt phòng thành công."); refreshReservations(); } else { JOptionPane.showMessageDialog(panel, "Hủy đặt phòng thất bại hoặc trạng thái không hợp lệ.", "Lỗi", JOptionPane.ERROR_MESSAGE); } });
+            checkin.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); boolean ok = (currentUserId!=null) ? reservationService.checkIn(id, roomId, currentUserId) : reservationService.checkIn(id, roomId); if (ok) { JOptionPane.showMessageDialog(panel, "Check-in thành công. Phòng đã chuyển sang trạng thái đang sử dụng."); refreshReservations(); } else { JOptionPane.showMessageDialog(panel, "Check-in thất bại. Chỉ được check-in các phiếu ở trạng thái PENDING/CONFIRMED.", "Lỗi", JOptionPane.ERROR_MESSAGE); } });
+            checkout.addActionListener(e -> { stopCellEditing(); int id = Integer.parseInt(table.getValueAt(row,0).toString()); com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation)table.getValueAt(row,7); int roomId = rr.getRoomId(); boolean ok = (currentUserId!=null) ? reservationService.checkOut(id, roomId, currentUserId) : reservationService.checkOut(id, roomId); if (ok) { JOptionPane.showMessageDialog(panel, "Check-out thành công. Phòng chuyển sang dọn dẹp, đang chuẩn bị lập hóa đơn."); refreshReservations(); Integer stayId = reservationService.getLatestStayIdForReservation(id); if (stayId != null) { int choice = JOptionPane.showConfirmDialog(panel, "Khách trả phòng. Bạn muốn lập hóa đơn ngay?", "Check-out", JOptionPane.YES_NO_OPTION); if (choice == JOptionPane.YES_OPTION) { com.cnj42.hotel.service.InvoiceService inv = new com.cnj42.hotel.service.InvoiceService(); int invId = inv.createInvoiceForStay(stayId, currentUserId, 0.0); if (invId > 0) JOptionPane.showMessageDialog(panel, "Đã tạo hóa đơn ID=" + invId); else JOptionPane.showMessageDialog(panel, "Tạo hóa đơn thất bại", "Lỗi", JOptionPane.ERROR_MESSAGE); } } } else { JOptionPane.showMessageDialog(panel, "Check-out thất bại. Chỉ được check-out khi phiếu đang ở trạng thái CHECKED_IN.", "Lỗi", JOptionPane.ERROR_MESSAGE); } });
         }
 
-        @Override public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) { this.row = row; panel.setBackground(table.getSelectionBackground()); return panel; }
+        @Override public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) { this.row = row; panel.setBackground(table.getSelectionBackground()); if (value instanceof com.cnj42.hotel.model.Reservation) { com.cnj42.hotel.model.Reservation rr = (com.cnj42.hotel.model.Reservation) value; String st = rr.getStatus(); edit.setEnabled(!"CANCELLED".equals(st) && !"COMPLETED".equals(st)); cancel.setEnabled(!"CANCELLED".equals(st) && !"COMPLETED".equals(st)); checkin.setEnabled("PENDING".equals(st) || "CONFIRMED".equals(st)); checkout.setEnabled("CHECKED_IN".equals(st)); } return panel; }
         @Override public Object getCellEditorValue() { return null; }
     }
 

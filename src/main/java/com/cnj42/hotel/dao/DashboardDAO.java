@@ -89,15 +89,13 @@ public class DashboardDAO {
             }
         }
 
-        Calendar cal = Calendar.getInstance();
-        String[] labels = new String[6];
-        for (int i = 5; i >= 0; i--) {
-            cal.add(Calendar.MONTH, -1);
-            labels[5 - i] = String.format(Locale.US, "%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1);
-        }
-
-        for (int i = 0; i < labels.length; i++) {
-            values[i] = monthMap.getOrDefault(labels[i], 0);
+        Calendar current = Calendar.getInstance();
+        for (int index = 0; index < 6; index++) {
+            Calendar monthCal = (Calendar) current.clone();
+            monthCal.add(Calendar.MONTH, -(5 - index));
+            String monthKey = String.format(Locale.US, "%04d-%02d",
+                    monthCal.get(Calendar.YEAR), monthCal.get(Calendar.MONTH) + 1);
+            values[index] = monthMap.getOrDefault(monthKey, 0);
         }
 
         return values;
