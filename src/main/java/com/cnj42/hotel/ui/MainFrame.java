@@ -1151,9 +1151,7 @@ public class MainFrame extends JFrame {
             } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
                 try {
                     try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON " +
-                                "USING (CASE WHEN image_path IS NULL OR TRIM(image_path) = '' " +
-                                "THEN NULL ELSE JSON_ARRAY(image_path) END)");
+                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON");
                     }
                 } catch (SQLException e) {
                     System.err.println("Warning: failed to modify image_path column to JSON: " + e.getMessage());
@@ -1183,9 +1181,7 @@ public class MainFrame extends JFrame {
             } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
                 try {
                     try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON " +
-                                "USING (CASE WHEN amenities IS NULL OR TRIM(amenities) = '' " +
-                                "THEN NULL ELSE JSON_ARRAY(amenities) END)");
+                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON");
                     }
                 } catch (SQLException e) {
                     System.err.println("Warning: failed to modify amenities column to JSON: " + e.getMessage());
