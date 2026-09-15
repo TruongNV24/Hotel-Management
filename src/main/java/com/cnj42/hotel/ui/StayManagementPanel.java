@@ -3,6 +3,7 @@ package com.cnj42.hotel.ui;
 import com.cnj42.hotel.model.CheckoutSummary;
 import com.cnj42.hotel.model.ServiceUsage;
 import com.cnj42.hotel.model.StayDetail;
+import com.cnj42.hotel.service.ReservationService;
 import com.cnj42.hotel.service.StayService;
 import com.cnj42.hotel.utils.DBConnection;
 
@@ -50,6 +51,7 @@ public class StayManagementPanel extends JPanel {
     private static final int ACTION_COL = 9;
 
     private final StayService stayService = new StayService();
+    private final ReservationService reservationService = new ReservationService();
     private final Integer currentUserId;
     private DefaultTableModel tableModel;
     private JTable stayTable;
@@ -145,14 +147,14 @@ public class StayManagementPanel extends JPanel {
     }
 
     private JPanel buildStatsPanel() {
-        JPanel panel = new JPanel(new GridLayout(1, 4, 16, 0));
+        JPanel panel = new JPanel(new GridLayout(1, 4, 14, 0));
         panel.setOpaque(false);
-        panel.setBorder(new EmptyBorder(0, 0, 0, 0));
+        panel.setBorder(new EmptyBorder(4, 0, 8, 0));
 
-        panel.add(createStatCard("Đang chờ check-in", waitingCheckinCount, "Khách chưa nhận phòng", BLUE, PRIMARY_LIGHT));
-        panel.add(createStatCard("Đang lưu trú", inHouseCount, "Khách đang ở", GREEN, new Color(224, 244, 234)));
-        panel.add(createStatCard("Chờ check-out", waitingCheckoutCount, "Sắp hết hạn lưu trú", ORANGE, new Color(255, 240, 218)));
-        panel.add(createStatCard("Đã check-out", checkedOutCount, "Khách đã hoàn tất", RED, new Color(255, 230, 230)));
+        panel.add(createStatCard("Đang chờ check-in", waitingCheckinCount, "Khách chưa nhận phòng", BLUE, new Color(235, 241, 255)));
+        panel.add(createStatCard("Đang lưu trú", inHouseCount, "Khách đang ở", GREEN, new Color(230, 247, 237)));
+        panel.add(createStatCard("Chờ check-out", waitingCheckoutCount, "Sắp hết hạn lưu trú", ORANGE, new Color(255, 245, 233)));
+        panel.add(createStatCard("Đã check-out", checkedOutCount, "Khách đã hoàn tất", RED, new Color(255, 234, 236)));
 
         return panel;
     }
@@ -174,17 +176,17 @@ public class StayManagementPanel extends JPanel {
 
         JPanel card = new JPanel(new BorderLayout(12, 0));
         card.setOpaque(false);
-        card.setBorder(new EmptyBorder(18, 18, 18, 18));
+        card.setBorder(new EmptyBorder(16, 16, 16, 16));
 
         JPanel iconPanel = new JPanel(new GridBagLayout());
         iconPanel.setOpaque(false);
         JLabel icon = new JLabel("•");
-        icon.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        icon.setFont(new Font("Segoe UI", Font.BOLD, 22));
         icon.setForeground(accent);
         icon.setOpaque(true);
         icon.setBackground(softBackground);
         icon.setHorizontalAlignment(SwingConstants.CENTER);
-        icon.setPreferredSize(new Dimension(42, 42));
+        icon.setPreferredSize(new Dimension(38, 38));
         iconPanel.add(icon);
         card.add(iconPanel, BorderLayout.WEST);
 
@@ -205,11 +207,12 @@ public class StayManagementPanel extends JPanel {
         helper.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         helper.setForeground(TEXT_MUTED);
         helper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        helper.setHorizontalAlignment(SwingConstants.LEFT);
 
         center.add(titleLabel);
-        center.add(Box.createVerticalStrut(6));
-        center.add(valueLabel);
         center.add(Box.createVerticalStrut(4));
+        center.add(valueLabel);
+        center.add(Box.createVerticalStrut(3));
         center.add(helper);
 
         card.add(center, BorderLayout.CENTER);
@@ -269,6 +272,24 @@ public class StayManagementPanel extends JPanel {
         ));
         toDateField.putClientProperty("JTextField.placeholderText", "dd/MM/yyyy");
 
+        JButton createGuestButton = new JButton("+ Khách mới");
+        createGuestButton.setBackground(PRIMARY);
+        createGuestButton.setForeground(Color.WHITE);
+        createGuestButton.setFocusPainted(false);
+        createGuestButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        createGuestButton.setBorder(new EmptyBorder(8, 18, 8, 18));
+        createGuestButton.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        createGuestButton.addActionListener(e -> openCreateGuestDialog());
+
+        JButton createReservationButton = new JButton("+ Đặt phòng");
+        createReservationButton.setBackground(PRIMARY);
+        createReservationButton.setForeground(Color.WHITE);
+        createReservationButton.setFocusPainted(false);
+        createReservationButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        createReservationButton.setBorder(new EmptyBorder(8, 18, 8, 18));
+        createReservationButton.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        createReservationButton.addActionListener(e -> openCreateReservationDialog());
+
         JButton refreshButton = new JButton("Làm mới");
         refreshButton.setBackground(PRIMARY);
         refreshButton.setForeground(Color.WHITE);
@@ -285,6 +306,8 @@ public class StayManagementPanel extends JPanel {
         toolbar.add(fromDateField);
         toolbar.add(toLabel);
         toolbar.add(toDateField);
+        toolbar.add(createGuestButton);
+        toolbar.add(createReservationButton);
         toolbar.add(refreshButton);
 
         card.add(toolbar, BorderLayout.NORTH);
@@ -301,9 +324,10 @@ public class StayManagementPanel extends JPanel {
         };
 
         stayTable = new JTable(tableModel);
-        stayTable.setRowHeight(62);
+        stayTable.setRowHeight(84);
         stayTable.setFillsViewportHeight(true);
-        stayTable.setSelectionBackground(new Color(245, 247, 255));
+        stayTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        stayTable.setSelectionBackground(new Color(238, 240, 255));
         stayTable.setSelectionForeground(TEXT_DARK);
         stayTable.setShowGrid(false);
         stayTable.setIntercellSpacing(new Dimension(0, 8));
@@ -315,6 +339,9 @@ public class StayManagementPanel extends JPanel {
         stayTable.setDefaultRenderer(Object.class, new StayStatusRenderer());
         stayTable.getColumnModel().getColumn(ACTION_COL).setCellRenderer(new StayActionRenderer());
         stayTable.getColumnModel().getColumn(ACTION_COL).setCellEditor(new StayActionEditor());
+        stayTable.getColumnModel().getColumn(ACTION_COL).setPreferredWidth(260);
+        stayTable.getColumnModel().getColumn(ACTION_COL).setMinWidth(250);
+        stayTable.getColumnModel().getColumn(ACTION_COL).setMaxWidth(280);
 
         stayTable.addMouseListener(new MouseAdapter() {
             @Override
@@ -346,7 +373,7 @@ public class StayManagementPanel extends JPanel {
         stayTable.getColumnModel().getColumn(6).setPreferredWidth(150);
         stayTable.getColumnModel().getColumn(7).setPreferredWidth(70);
         stayTable.getColumnModel().getColumn(8).setPreferredWidth(140);
-        stayTable.getColumnModel().getColumn(9).setPreferredWidth(180);
+        stayTable.getColumnModel().getColumn(9).setPreferredWidth(220);
 
         JScrollPane scrollPane = new JScrollPane(stayTable);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -555,6 +582,58 @@ public class StayManagementPanel extends JPanel {
 
     private int nvl(int value) {
         return value < 0 ? 0 : value;
+    }
+
+    private void openCreateGuestDialog() {
+        GuestDialog guestDialog = new GuestDialog(SwingUtilities.getWindowAncestor(this));
+        guestDialog.setVisible(true);
+        if (guestDialog.isSaved()) {
+            JOptionPane.showMessageDialog(this, "Tạo khách hàng thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            refreshStayData();
+        }
+    }
+
+    private void openCreateReservationDialog() {
+        ReservationDialog reservationDialog = new ReservationDialog(SwingUtilities.getWindowAncestor(this), null, currentUserId);
+        reservationDialog.setVisible(true);
+        if (reservationDialog.isSaved()) {
+            JOptionPane.showMessageDialog(this, "Tạo đặt phòng thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            refreshStayData();
+        }
+    }
+
+    private void openUpdateReservationDialog(StayRow stayRow) {
+        if (stayRow == null) {
+            return;
+        }
+        ReservationDialog reservationDialog = new ReservationDialog(SwingUtilities.getWindowAncestor(this), stayRow.getReservationId(), currentUserId);
+        reservationDialog.setVisible(true);
+        if (reservationDialog.isSaved()) {
+            JOptionPane.showMessageDialog(this, "Cập nhật đặt phòng thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            refreshStayData();
+        }
+    }
+
+    private void cancelReservation(StayRow stayRow) {
+        if (stayRow == null) {
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có muốn hủy đặt phòng này không?",
+                "Xác nhận hủy",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        boolean ok = reservationService.cancelReservation(stayRow.getReservationId(), stayRow.getRoomId());
+        if (ok) {
+            JOptionPane.showMessageDialog(this, "Hủy đặt phòng thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            refreshStayData();
+        } else {
+            JOptionPane.showMessageDialog(this, "Hủy đặt phòng thất bại hoặc trạng thái không hợp lệ.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void openCheckInDialog(StayRow stayRow) {
@@ -1070,6 +1149,28 @@ public class StayManagementPanel extends JPanel {
         return detail;
     }
 
+    private static JButton createActionButton(String text, Color background, Color foreground, Color borderColor) {
+        JButton button = new JButton(text);
+        button.setFocusPainted(false);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(true);
+        button.setRolloverEnabled(true);
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(borderColor, 1, true),
+                new EmptyBorder(5, 10, 5, 10)
+        ));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(90, 34));
+        button.setMinimumSize(new Dimension(82, 34));
+        button.setMaximumSize(new Dimension(120, 34));
+        button.setMargin(new Insets(4, 8, 4, 8));
+        return button;
+    }
+
     private String formatCurrency(double value) {
         return String.format("%,.0f đ", value);
     }
@@ -1093,19 +1194,12 @@ public class StayManagementPanel extends JPanel {
     private class StayActionRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 8));
+            JPanel panel = new JPanel(new GridLayout(2, 2, 6, 8));
             panel.setOpaque(true);
-            panel.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
+            panel.setBackground(isSelected ? table.getSelectionBackground() : CARD);
+            panel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
-            JButton detailButton = new JButton("Chi tiết");
-            detailButton.setFocusPainted(false);
-            detailButton.setBackground(new Color(245, 247, 255));
-            detailButton.setForeground(PRIMARY);
-            detailButton.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(PRIMARY, 1, true),
-                    new EmptyBorder(6, 12, 6, 12)
-            ));
-            detailButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            JButton detailButton = createActionButton("Chi tiết", new Color(245, 247, 255), PRIMARY, PRIMARY);
             detailButton.addActionListener(e -> {
                 if (value instanceof StayRow stayRow) {
                     openStayDetailDialog(stayRow);
@@ -1115,25 +1209,19 @@ public class StayManagementPanel extends JPanel {
             panel.add(detailButton);
             if (value instanceof StayRow stayRow) {
                 if ("WAITING_CHECK_IN".equals(stayRow.getStatusCode())) {
-                    JButton checkin = new JButton("Check-in");
-                    checkin.setFocusPainted(false);
-                    checkin.setBackground(new Color(224, 244, 234));
-                    checkin.setForeground(GREEN);
-                    checkin.setBorder(BorderFactory.createCompoundBorder(
-                            BorderFactory.createLineBorder(GREEN, 1, true),
-                            new EmptyBorder(6, 12, 6, 12)
-                    ));
+                    JButton edit = createActionButton("Sửa", new Color(245, 247, 255), PRIMARY, PRIMARY);
+                    edit.addActionListener(e -> openUpdateReservationDialog(stayRow));
+                    panel.add(edit);
+
+                    JButton cancel = createActionButton("Hủy", new Color(255, 230, 230), RED, RED);
+                    cancel.addActionListener(e -> cancelReservation(stayRow));
+                    panel.add(cancel);
+
+                    JButton checkin = createActionButton("Check-in", new Color(224, 244, 234), GREEN, GREEN);
                     checkin.addActionListener(e -> openCheckInDialog(stayRow));
                     panel.add(checkin);
                 } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
-                    JButton checkout = new JButton("Check-out");
-                    checkout.setFocusPainted(false);
-                    checkout.setBackground(new Color(255, 240, 218));
-                    checkout.setForeground(ORANGE);
-                    checkout.setBorder(BorderFactory.createCompoundBorder(
-                            BorderFactory.createLineBorder(ORANGE, 1, true),
-                            new EmptyBorder(6, 12, 6, 12)
-                    ));
+                    JButton checkout = createActionButton("Check-out", new Color(255, 240, 218), ORANGE, ORANGE);
                     checkout.addActionListener(e -> openCheckoutDialog(stayRow));
                     panel.add(checkout);
                 }
@@ -1146,23 +1234,41 @@ public class StayManagementPanel extends JPanel {
         @Override
         public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
             if (value instanceof StayRow stayRow) {
-                JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 8));
-                panel.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
-                JButton detailBtn = new JButton("Chi tiết");
+                JPanel panel = new JPanel(new GridLayout(2, 2, 6, 8));
+                panel.setOpaque(true);
+                panel.setBackground(isSelected ? table.getSelectionBackground() : CARD);
+                panel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+                JButton detailBtn = createActionButton("Chi tiết", new Color(245, 247, 255), PRIMARY, PRIMARY);
                 detailBtn.addActionListener(e -> {
                     openStayDetailDialog(stayRow);
                     fireEditingStopped();
                 });
                 panel.add(detailBtn);
+
                 if ("WAITING_CHECK_IN".equals(stayRow.getStatusCode())) {
-                    JButton checkinBtn = new JButton("Check-in");
+                    JButton editBtn = createActionButton("Sửa", new Color(245, 247, 255), PRIMARY, PRIMARY);
+                    editBtn.addActionListener(e -> {
+                        openUpdateReservationDialog(stayRow);
+                        fireEditingStopped();
+                    });
+                    panel.add(editBtn);
+
+                    JButton cancelBtn = createActionButton("Hủy", new Color(255, 230, 230), RED, RED);
+                    cancelBtn.addActionListener(e -> {
+                        cancelReservation(stayRow);
+                        fireEditingStopped();
+                    });
+                    panel.add(cancelBtn);
+
+                    JButton checkinBtn = createActionButton("Check-in", new Color(224, 244, 234), GREEN, GREEN);
                     checkinBtn.addActionListener(e -> {
                         openCheckInDialog(stayRow);
                         fireEditingStopped();
                     });
                     panel.add(checkinBtn);
                 } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
-                    JButton checkoutBtn = new JButton("Check-out");
+                    JButton checkoutBtn = createActionButton("Check-out", new Color(255, 240, 218), ORANGE, ORANGE);
                     checkoutBtn.addActionListener(e -> {
                         openCheckoutDialog(stayRow);
                         fireEditingStopped();
