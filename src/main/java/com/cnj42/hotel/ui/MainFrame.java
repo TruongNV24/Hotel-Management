@@ -1835,7 +1835,7 @@ public class MainFrame extends JFrame {
 
     private void showPaymentManagement() {
         pageTitle.setText("Quản lý thanh toán");
-        pageDescription.setText("Lập hóa đơn, thanh toán và in hóa đơn");
+        pageDescription.setText("Tra cứu, in và quản lý hóa đơn đã phát sinh từ quá trình checkout");
 
         contentPanel.removeAll();
         contentPanel.add(new PaymentManagerPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);

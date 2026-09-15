@@ -4,7 +4,9 @@ import com.cnj42.hotel.service.InvoiceService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -15,37 +17,40 @@ import com.cnj42.hotel.utils.DBConnection;
 
 public class PaymentManagerPanel extends JPanel {
 
+    private static final Color PRIMARY = new Color(105, 78, 210);
+    private static final Color BACKGROUND = new Color(246, 247, 251);
+    private static final Color CARD = Color.WHITE;
+    private static final Color BORDER = new Color(230, 234, 241);
+    private static final Color TEXT_DARK = new Color(35, 40, 52);
+    private static final Color TEXT_MUTED = new Color(120, 125, 140);
+    private static final Color GREEN = new Color(45, 166, 108);
+    private static final Color ORANGE = new Color(225, 143, 55);
+    private static final Color RED = new Color(210, 82, 82);
+
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final InvoiceService invoiceService = new InvoiceService();
     private final Integer currentUserId;
+    private final JLabel invoiceCountLabel = new JLabel("0");
+    private final JLabel paidCountLabel = new JLabel("0");
+    private final JLabel unpaidCountLabel = new JLabel("0");
+    private final JLabel revenueLabel = new JLabel("0 VND");
+    private final JTextField searchField = new JTextField();
+    private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{"Tất cả", "PAID", "UNPAID", "CANCELLED"});
 
     public PaymentManagerPanel() { this(null); }
 
     public PaymentManagerPanel(Integer currentUserId) {
         this.currentUserId = currentUserId;
-        setLayout(new BorderLayout(0, 12));
-        setBorder(new EmptyBorder(12, 12, 12, 12));
+        setLayout(new BorderLayout(0, 16));
+        setBackground(BACKGROUND);
+        setBorder(new EmptyBorder(14, 16, 18, 16));
 
-        JPanel top = new JPanel(new BorderLayout(8,0)); 
-        top.setOpaque(false);
-        JLabel title = new JLabel("Quản lý thanh toán");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        top.add(title, BorderLayout.WEST);
-
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); 
-        controls.setOpaque(false);
-        JButton createInv = new JButton("Tạo hóa đơn");
-        createInv.addActionListener(e -> createInvoiceForStay());
-        controls.add(createInv);
-        
-        JButton refreshBtn = new JButton("Làm mới");
-        refreshBtn.addActionListener(e -> refreshInvoices());
-        controls.add(refreshBtn);
-        
-        top.add(controls, BorderLayout.EAST);
-
-        add(top, BorderLayout.NORTH);
+        JPanel north = new JPanel(new BorderLayout(0, 14));
+        north.setOpaque(false);
+        north.add(buildHeader(), BorderLayout.NORTH);
+        north.add(buildStats(), BorderLayout.CENTER);
+        add(north, BorderLayout.NORTH);
 
         tableModel = new DefaultTableModel(
             new Object[]{"ID","Mã","Stay ID","Phòng","Tiền phòng","Tiền dịch vụ","Giảm","Thuế","Tổng","Trạng thái","Hành động"}, 
@@ -55,53 +60,227 @@ public class PaymentManagerPanel extends JPanel {
         };
 
         table = new JTable(tableModel);
-        table.setRowHeight(36);
+        table.setRowHeight(48);
+        table.setFillsViewportHeight(true);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 6));
+        table.setSelectionBackground(new Color(238, 240, 255));
+        table.setSelectionForeground(TEXT_DARK);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
+        table.getTableHeader().setBackground(Color.WHITE);
+        table.getTableHeader().setForeground(TEXT_DARK);
+        table.getTableHeader().setReorderingAllowed(false);
+        table.setDefaultRenderer(Object.class, new InvoiceCellRenderer());
+        table.getColumnModel().getColumn(10).setPreferredWidth(150);
+        table.getColumnModel().getColumn(10).setMinWidth(140);
+        table.getColumnModel().getColumn(10).setMaxWidth(170);
+        table.getColumnModel().getColumn(0).setPreferredWidth(45);
+        table.getColumnModel().getColumn(1).setPreferredWidth(145);
+        table.getColumnModel().getColumn(2).setPreferredWidth(70);
+        table.getColumnModel().getColumn(3).setPreferredWidth(70);
+        table.getColumnModel().getColumn(8).setPreferredWidth(120);
         table.getColumnModel().getColumn(10).setCellRenderer((tbl, value, isSel, hasFocus, row, col) -> {
-            JPanel p = new JPanel(new FlowLayout(FlowLayout.CENTER,4,2));
-            JButton apply = new JButton("Áp dụng mã"); 
-            JButton pay = new JButton("Xác nhận"); 
-            JButton cancel = new JButton("Hủy"); 
-            JButton print = new JButton("In");
-            p.add(apply); p.add(pay); p.add(cancel); p.add(print);
-            p.setBackground(isSel?tbl.getSelectionBackground():Color.WHITE);
-            return p;
+            return createActionPanel(isSel ? tbl.getSelectionBackground() : CARD);
         });
 
         table.getColumnModel().getColumn(10).setCellEditor(new PaymentActionEditor());
 
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        JPanel content = new JPanel(new BorderLayout(0, 10));
+        content.setBackground(CARD);
+        content.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER, 1, true),
+                new EmptyBorder(12, 12, 12, 12)
+        ));
+        content.add(buildToolbar(), BorderLayout.NORTH);
+        content.add(new JScrollPane(table), BorderLayout.CENTER);
+        add(content, BorderLayout.CENTER);
 
         refreshInvoices();
     }
 
+    private JPanel buildHeader() {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JLabel title = new JLabel("Quản lý thanh toán");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        title.setForeground(TEXT_DARK);
+        JLabel subtitle = new JLabel("Theo dõi hóa đơn và lịch sử thanh toán từ các lượt checkout");
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        subtitle.setForeground(TEXT_MUTED);
+        panel.add(title);
+        panel.add(Box.createVerticalStrut(4));
+        panel.add(subtitle);
+        return panel;
+    }
+
+    private JPanel buildStats() {
+        JPanel panel = new JPanel(new GridLayout(1, 4, 14, 0));
+        panel.setOpaque(false);
+        panel.add(createStatCard("Tổng hóa đơn", invoiceCountLabel, "Đã phát sinh", PRIMARY));
+        panel.add(createStatCard("Đã thanh toán", paidCountLabel, "Trạng thái PAID", GREEN));
+        panel.add(createStatCard("Chưa thanh toán", unpaidCountLabel, "Cần theo dõi", ORANGE));
+        panel.add(createStatCard("Doanh thu", revenueLabel, "Tổng hóa đơn đã trả", RED));
+        return panel;
+    }
+
+    private JPanel createStatCard(String title, JLabel value, String helper, Color accent) {
+        JPanel card = new JPanel(new BorderLayout(10, 4));
+        card.setBackground(CARD);
+        card.setBorder(BorderFactory.createCompoundBorder(new LineBorder(BORDER, 1, true), new EmptyBorder(13, 15, 13, 15)));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        titleLabel.setForeground(TEXT_MUTED);
+        value.setFont(new Font("Segoe UI", Font.BOLD, 21));
+        value.setForeground(accent);
+        JLabel helperLabel = new JLabel(helper);
+        helperLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        helperLabel.setForeground(TEXT_MUTED);
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        text.add(titleLabel);
+        text.add(Box.createVerticalStrut(3));
+        text.add(value);
+        text.add(Box.createVerticalStrut(2));
+        text.add(helperLabel);
+        card.add(text, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel buildToolbar() {
+        JPanel toolbar = new JPanel(new BorderLayout(10, 0));
+        toolbar.setOpaque(false);
+        searchField.setPreferredSize(new Dimension(280, 34));
+        searchField.setBorder(BorderFactory.createCompoundBorder(new LineBorder(BORDER, 1, true), new EmptyBorder(0, 10, 0, 10)));
+        searchField.putClientProperty("JTextField.placeholderText", "Tìm mã hóa đơn hoặc phòng");
+        searchField.addActionListener(e -> refreshInvoices());
+        toolbar.add(searchField, BorderLayout.WEST);
+
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        controls.setOpaque(false);
+        statusFilter.setPreferredSize(new Dimension(125, 34));
+        statusFilter.addActionListener(e -> refreshInvoices());
+        JButton refresh = createActionButton("Làm mới", PRIMARY);
+        refresh.addActionListener(e -> refreshInvoices());
+        controls.add(new JLabel("Trạng thái"));
+        controls.add(statusFilter);
+        controls.add(refresh);
+        toolbar.add(controls, BorderLayout.EAST);
+        return toolbar;
+    }
+
+    private JButton createActionButton(String text, Color color) {
+        JButton button = new JButton(text);
+        button.setBackground(color);
+        button.setForeground(Color.BLACK);
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(7, 10, 7, 10));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        return button;
+    }
+
+    private JPanel createActionPanel(Color background) {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 2));
+        panel.setOpaque(true);
+        panel.setBackground(background);
+        panel.add(createActionButton("Hủy", RED));
+        panel.add(createActionButton("In hóa đơn", PRIMARY));
+        return panel;
+    }
+
     private void refreshInvoices() {
         tableModel.setRowCount(0);
+        String keyword = searchField.getText() == null ? "" : searchField.getText().trim();
+        String selectedStatus = (String) statusFilter.getSelectedItem();
         String sql = "SELECT i.invoice_id, i.invoice_code, i.stay_id, r.room_number, i.room_amount, i.service_amount, " +
                      "i.discount_amount, i.tax_amount, i.total_amount, i.status " +
                      "FROM invoices i " +
                      "JOIN stays s ON i.stay_id = s.stay_id " +
-                     "JOIN rooms r ON s.room_id = r.room_id " +
+                 "JOIN rooms r ON s.room_id = r.room_id " +
+                 "WHERE (? = '' OR i.invoice_code LIKE ? OR r.room_number LIKE ?) " +
+                 "AND (? = 'Tất cả' OR i.status = ?) " +
                      "ORDER BY i.issued_at DESC";
-        try (Connection conn = DBConnection.getConnection(); 
-             PreparedStatement ps = conn.prepareStatement(sql); 
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                tableModel.addRow(new Object[]{
-                    rs.getInt("invoice_id"), 
-                    rs.getString("invoice_code"), 
-                    rs.getInt("stay_id"), 
-                    rs.getString("room_number"),
-                    rs.getDouble("room_amount"), 
-                    rs.getDouble("service_amount"), 
-                    rs.getDouble("discount_amount"), 
-                    rs.getDouble("tax_amount"), 
-                    rs.getDouble("total_amount"), 
-                    rs.getString("status"), 
-                    rs.getInt("invoice_id")
-                });
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             PreparedStatement statsPs = conn.prepareStatement(
+                 "SELECT COUNT(*) AS invoice_count, " +
+                 "SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) AS paid_count, " +
+                 "SUM(CASE WHEN status = 'UNPAID' THEN 1 ELSE 0 END) AS unpaid_count, " +
+                 "COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_amount ELSE 0 END), 0) AS revenue " +
+                 "FROM invoices")) {
+            String like = "%" + keyword + "%";
+            ps.setString(1, keyword);
+            ps.setString(2, like);
+            ps.setString(3, like);
+            ps.setString(4, selectedStatus == null ? "Tất cả" : selectedStatus);
+            ps.setString(5, selectedStatus == null ? "Tất cả" : selectedStatus);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    tableModel.addRow(new Object[]{
+                        rs.getInt("invoice_id"),
+                        rs.getString("invoice_code"),
+                        rs.getInt("stay_id"),
+                        rs.getString("room_number"),
+                        rs.getDouble("room_amount"),
+                        rs.getDouble("service_amount"),
+                        rs.getDouble("discount_amount"),
+                        rs.getDouble("tax_amount"),
+                        rs.getDouble("total_amount"),
+                        rs.getString("status"),
+                        rs.getInt("invoice_id")
+                    });
+                }
+            }
+            try (ResultSet stats = statsPs.executeQuery()) {
+                if (stats.next()) {
+                    invoiceCountLabel.setText(String.valueOf(stats.getInt("invoice_count")));
+                    paidCountLabel.setText(String.valueOf(stats.getInt("paid_count")));
+                    unpaidCountLabel.setText(String.valueOf(stats.getInt("unpaid_count")));
+                    revenueLabel.setText(formatMoney(stats.getDouble("revenue")));
+                }
             }
         } catch (SQLException e) {
             System.err.println("Lỗi lấy invoices: " + e.getMessage());
+        }
+    }
+
+    private String formatMoney(double amount) {
+        return String.format("%,.0f VND", amount);
+    }
+
+    private static class InvoiceCellRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                        boolean hasFocus, int row, int column) {
+            JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            label.setBorder(new EmptyBorder(0, 8, 0, 8));
+            label.setForeground(TEXT_DARK);
+            label.setBackground(isSelected ? table.getSelectionBackground() : CARD);
+            label.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+            if (column >= 4 && column <= 8 && value instanceof Number) {
+                label.setText(String.format("%,.0f VND", ((Number) value).doubleValue()));
+                label.setHorizontalAlignment(SwingConstants.RIGHT);
+            } else if (column == 9 && value != null) {
+                String status = value.toString();
+                label.setText(status);
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setFont(new Font("Segoe UI", Font.BOLD, 11));
+                if (!isSelected) {
+                    if ("PAID".equals(status)) {
+                        label.setForeground(GREEN);
+                    } else if ("UNPAID".equals(status)) {
+                        label.setForeground(ORANGE);
+                    } else {
+                        label.setForeground(RED);
+                    }
+                }
+            } else {
+                label.setHorizontalAlignment(SwingConstants.LEFT);
+            }
+            return label;
         }
     }
 
@@ -146,35 +325,12 @@ public class PaymentManagerPanel extends JPanel {
     }
 
     private class PaymentActionEditor extends AbstractCellEditor implements javax.swing.table.TableCellEditor {
-        private final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER,4,2));
-        private final JButton apply = new JButton("Áp dụng mã");
-        private final JButton pay = new JButton("Xác nhận");
-        private final JButton cancel = new JButton("Hủy");
-        private final JButton print = new JButton("In");
+        private final JPanel panel = createActionPanel(table.getSelectionBackground());
+        private final JButton cancel = (JButton) panel.getComponent(0);
+        private final JButton print = (JButton) panel.getComponent(1);
         private int row;
 
         PaymentActionEditor() {
-            panel.add(apply); 
-            panel.add(pay); 
-            panel.add(cancel); 
-            panel.add(print);
-            
-            apply.addActionListener(e -> {
-                stopCellEditing();
-                Object idObj = table.getValueAt(row, 0);
-                if (idObj == null) return;
-                int invoiceId = Integer.parseInt(idObj.toString());
-                applyDiscountCode(invoiceId);
-            });
-            
-            pay.addActionListener(e -> {
-                stopCellEditing();
-                Object idObj = table.getValueAt(row, 0);
-                if (idObj == null) return;
-                int invoiceId = Integer.parseInt(idObj.toString());
-                confirmPaymentDialog(invoiceId);
-            });
-            
             cancel.addActionListener(e -> {
                 stopCellEditing();
                 Object idObj = table.getValueAt(row, 0);
@@ -390,9 +546,11 @@ public class PaymentManagerPanel extends JPanel {
 
     private void showInvoicePreview(int invoiceId) {
         String sql = "SELECT i.invoice_code, i.room_amount, i.service_amount, i.discount_amount, i.tax_amount, i.total_amount, " +
-                     "i.status, i.issued_at, s.guest_name, r.room_number " +
+                     "i.status, i.issued_at, g.full_name AS guest_name, r.room_number " +
                      "FROM invoices i " +
                      "JOIN stays s ON i.stay_id = s.stay_id " +
+                     "JOIN reservations res ON s.reservation_id = res.reservation_id " +
+                     "JOIN guests g ON res.guest_id = g.guest_id " +
                      "JOIN rooms r ON s.room_id = r.room_id " +
                      "WHERE i.invoice_id = ?";
         try (Connection conn = DBConnection.getConnection(); 

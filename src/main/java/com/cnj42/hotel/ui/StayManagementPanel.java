@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -98,7 +99,7 @@ public class StayManagementPanel extends JPanel {
         contentCard.add(buildTablePanel(), BorderLayout.CENTER);
         add(contentCard, BorderLayout.CENTER);
 
-        refreshStayData();
+        SwingUtilities.invokeLater(this::refreshStayData);
     }
 
     public static String getStatusLabel(String status) {
@@ -274,7 +275,7 @@ public class StayManagementPanel extends JPanel {
 
         JButton createGuestButton = new JButton("+ Khách mới");
         createGuestButton.setBackground(PRIMARY);
-        createGuestButton.setForeground(Color.WHITE);
+        createGuestButton.setForeground(Color.blue);
         createGuestButton.setFocusPainted(false);
         createGuestButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         createGuestButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -283,7 +284,7 @@ public class StayManagementPanel extends JPanel {
 
         JButton createReservationButton = new JButton("+ Đặt phòng");
         createReservationButton.setBackground(PRIMARY);
-        createReservationButton.setForeground(Color.WHITE);
+        createReservationButton.setForeground(Color.YELLOW);
         createReservationButton.setFocusPainted(false);
         createReservationButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         createReservationButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -292,7 +293,7 @@ public class StayManagementPanel extends JPanel {
 
         JButton refreshButton = new JButton("Làm mới");
         refreshButton.setBackground(PRIMARY);
-        refreshButton.setForeground(Color.WHITE);
+        refreshButton.setForeground(Color.BLACK);
         refreshButton.setFocusPainted(false);
         refreshButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         refreshButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -438,7 +439,6 @@ public class StayManagementPanel extends JPanel {
                 "LEFT JOIN guests g ON g.guest_id = res.guest_id " +
                 "LEFT JOIN rooms r ON r.room_id = res.room_id " +
                 "LEFT JOIN stays s ON s.reservation_id = res.reservation_id " +
-                "LEFT JOIN reservation_guests rg ON rg.reservation_id = res.reservation_id " +
                 "WHERE 1=1 "
         );
 
@@ -747,7 +747,7 @@ public class StayManagementPanel extends JPanel {
             return;
         }
 
-        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "CHECK-OUT", true);
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "THANH TOÁN & CHECK-OUT", true);
         dialog.setLayout(new BorderLayout(10, 10));
         dialog.setResizable(false);
 
@@ -767,13 +767,35 @@ public class StayManagementPanel extends JPanel {
         summaryPanel.add(new JLabel(formatCurrency(summary.getRoomAmount())));
         summaryPanel.add(new JLabel("Dịch vụ:"));
         summaryPanel.add(new JLabel(formatCurrency(summary.getServiceAmount())));
-        summaryPanel.add(new JLabel("Tổng cộng:"));
+        summaryPanel.add(new JLabel("Tổng trước giảm:"));
         summaryPanel.add(new JLabel(formatCurrency(summary.getTotalAmount())));
+
+        JLabel discountValue = new JLabel(formatCurrency(0));
+        summaryPanel.add(new JLabel("Giảm giá:"));
+        summaryPanel.add(discountValue);
+
+        JLabel totalValue = new JLabel(formatCurrency(summary.getTotalAmount()));
+        totalValue.setFont(totalValue.getFont().deriveFont(Font.BOLD));
+        summaryPanel.add(new JLabel("Tổng thanh toán:"));
+        summaryPanel.add(totalValue);
+
+        JPanel discountPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        discountPanel.setOpaque(false);
+        discountPanel.add(new JLabel("Mã giảm giá:"));
+        JComboBox<DiscountOption> discountBox = new JComboBox<>(new DiscountOption[]{
+            new DiscountOption("Không áp dụng", 0),
+            new DiscountOption("WELCOME5 - Giảm 5%", 5),
+            new DiscountOption("STAY10 - Giảm 10%", 10),
+            new DiscountOption("VIP15 - Giảm 15%", 15)
+        });
+        discountBox.setPreferredSize(new Dimension(210, 32));
+        discountPanel.add(Box.createHorizontalStrut(12));
+        discountPanel.add(discountBox);
 
         JPanel methodPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         methodPanel.setOpaque(false);
         methodPanel.add(new JLabel("Phương thức thanh toán:"));
-        JComboBox<String> paymentMethod = new JComboBox<>(new String[]{"CASH", "CARD", "BANK_TRANSFER"});
+        JComboBox<String> paymentMethod = new JComboBox<>(new String[]{"CASH", "BANK_TRANSFER", "CARD"});
         paymentMethod.setPreferredSize(new Dimension(170, 32));
         methodPanel.add(Box.createHorizontalStrut(12));
         methodPanel.add(paymentMethod);
@@ -790,7 +812,13 @@ public class StayManagementPanel extends JPanel {
         footer.add(confirm);
 
         content.add(summaryPanel, BorderLayout.CENTER);
-        content.add(methodPanel, BorderLayout.SOUTH);
+        JPanel paymentPanel = new JPanel();
+        paymentPanel.setLayout(new BoxLayout(paymentPanel, BoxLayout.Y_AXIS));
+        paymentPanel.setOpaque(false);
+        paymentPanel.add(discountPanel);
+        paymentPanel.add(Box.createVerticalStrut(8));
+        paymentPanel.add(methodPanel);
+        content.add(paymentPanel, BorderLayout.SOUTH);
 
         dialog.add(content, BorderLayout.CENTER);
         dialog.add(footer, BorderLayout.SOUTH);
@@ -798,8 +826,17 @@ public class StayManagementPanel extends JPanel {
         dialog.setLocationRelativeTo(this);
 
         cancel.addActionListener(e -> dialog.dispose());
+        discountBox.addActionListener(e -> {
+            DiscountOption option = (DiscountOption) discountBox.getSelectedItem();
+            double discountAmount = summary.getTotalAmount() * (option == null ? 0 : option.percentage) / 100;
+            discountValue.setText(formatCurrency(discountAmount));
+            totalValue.setText(formatCurrency(summary.getTotalAmount() - discountAmount));
+        });
+
         confirm.addActionListener(e -> {
-            boolean ok = performCheckout(stayRow, summary, (String) paymentMethod.getSelectedItem());
+            DiscountOption option = (DiscountOption) discountBox.getSelectedItem();
+            double discountAmount = summary.getTotalAmount() * (option == null ? 0 : option.percentage) / 100;
+            boolean ok = performCheckout(stayRow, summary, discountAmount, (String) paymentMethod.getSelectedItem());
             if (ok) {
                 JOptionPane.showMessageDialog(this, "Thanh toán và check-out thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 dialog.dispose();
@@ -813,18 +850,33 @@ public class StayManagementPanel extends JPanel {
     }
 
     private CheckoutSummary loadCheckoutSummary(int reservationId, int roomId, int stayId) {
-        String roomSql = "SELECT rt.price_per_night FROM rooms r JOIN room_types rt ON rt.room_type_id = r.room_type_id WHERE r.room_id = ?";
+        String staySql = "SELECT s.actual_check_in, r.reservation_id, r.check_out_date, rt.price_per_night " +
+                "FROM stays s JOIN reservations r ON r.reservation_id = s.reservation_id " +
+                "JOIN rooms rm ON rm.room_id = s.room_id " +
+                "JOIN room_types rt ON rt.room_type_id = rm.room_type_id " +
+                "WHERE s.stay_id = ? AND s.room_id = ?";
         String serviceSql = "SELECT COALESCE(SUM(su.quantity * su.unit_price), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
 
         BigDecimal roomAmount = BigDecimal.ZERO;
         BigDecimal serviceAmount = BigDecimal.ZERO;
 
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement roomPs = conn.prepareStatement(roomSql)) {
-            roomPs.setInt(1, roomId);
-            try (ResultSet roomRs = roomPs.executeQuery()) {
-                if (roomRs.next()) {
-                    roomAmount = roomAmount.add(BigDecimal.valueOf(roomRs.getDouble("price_per_night")));
+             PreparedStatement stayPs = conn.prepareStatement(staySql)) {
+            stayPs.setInt(1, stayId);
+            stayPs.setInt(2, roomId);
+            try (ResultSet stayRs = stayPs.executeQuery()) {
+                if (stayRs.next()) {
+                    Timestamp actualCheckIn = stayRs.getTimestamp("actual_check_in");
+                    Date expectedCheckout = stayRs.getDate("check_out_date");
+                    double pricePerNight = stayRs.getDouble("price_per_night");
+                    if (actualCheckIn != null && expectedCheckout != null) {
+                        LocalDateTime checkIn = actualCheckIn.toLocalDateTime();
+                        LocalDate expected = expectedCheckout.toLocalDate();
+                        long nights = Math.max(1, ChronoUnit.DAYS.between(checkIn.toLocalDate(), expected));
+                        roomAmount = BigDecimal.valueOf(nights * pricePerNight);
+                    } else if (pricePerNight > 0) {
+                        roomAmount = BigDecimal.valueOf(pricePerNight);
+                    }
                 }
             }
 
@@ -845,7 +897,133 @@ public class StayManagementPanel extends JPanel {
         return new CheckoutSummary(roomAmount.doubleValue(), serviceAmount.doubleValue(), total.doubleValue());
     }
 
-    private boolean performCheckout(StayRow stayRow, CheckoutSummary summary, String paymentMethod) {
+    private void openAddServiceDialog(StayRow stayRow) {
+        if (stayRow == null || stayRow.getStayId() <= 0) {
+            JOptionPane.showMessageDialog(this, "Không tìm thấy lưu trú để thêm dịch vụ.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Thêm dịch vụ", true);
+        dialog.setLayout(new BorderLayout(12, 12));
+        dialog.setResizable(false);
+
+        JPanel panel = new JPanel(new GridLayout(0, 2, 10, 10));
+        panel.setBorder(new EmptyBorder(14, 14, 14, 14));
+        panel.setBackground(CARD);
+
+        JLabel serviceLabel = new JLabel("Dịch vụ:");
+        JComboBox<String> serviceCombo = new JComboBox<>();
+        JLabel quantityLabel = new JLabel("Số lượng:");
+        JTextField quantityField = new JTextField("1");
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT service_id, service_name, price FROM services WHERE status = 'ACTIVE' ORDER BY service_name")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    serviceCombo.addItem(rs.getString("service_name") + " | " + formatCurrency(rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Không tải được dịch vụ: " + e.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        panel.add(serviceLabel);
+        panel.add(serviceCombo);
+        panel.add(quantityLabel);
+        panel.add(quantityField);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        footer.setOpaque(false);
+        JButton cancel = new JButton("Hủy");
+        JButton confirm = new JButton("Lưu dịch vụ");
+        confirm.setBackground(PRIMARY);
+        confirm.setForeground(Color.WHITE);
+        footer.add(cancel);
+        footer.add(confirm);
+
+        cancel.addActionListener(e -> dialog.dispose());
+        confirm.addActionListener(e -> {
+            String selected = (String) serviceCombo.getSelectedItem();
+            if (selected == null || selected.isBlank()) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn dịch vụ.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            int serviceId = -1;
+            double price = 0;
+              try (Connection conn = DBConnection.getConnection();
+                  PreparedStatement ps = conn.prepareStatement("SELECT service_id, price FROM services WHERE service_name = ? AND status = 'ACTIVE'")) {
+                 ps.setString(1, selected.split("\\|")[0].trim());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        serviceId = rs.getInt("service_id");
+                        price = rs.getDouble("price");
+                    }
+                }
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Không thể xác định dịch vụ: " + ex.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            int quantity;
+            try {
+                quantity = Integer.parseInt(quantityField.getText().trim());
+                if (quantity <= 0) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Số lượng dịch vụ phải là số nguyên dương.", "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            boolean saved = performAddService(stayRow.getStayId(), serviceId, quantity, price, currentUserId);
+            if (saved) {
+                JOptionPane.showMessageDialog(this, "Thêm dịch vụ thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                dialog.dispose();
+                refreshStayData();
+            } else {
+                JOptionPane.showMessageDialog(this, "Không thể thêm dịch vụ cho lưu trú này.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        dialog.add(panel, BorderLayout.CENTER);
+        dialog.add(footer, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private boolean performAddService(int stayId, int serviceId, int quantity, double unitPrice, Integer currentUserId) {
+        if (stayId <= 0 || serviceId <= 0 || quantity <= 0) {
+            return false;
+        }
+
+        String insertUsage = "INSERT INTO service_usages (stay_id, service_id, quantity, unit_price, used_at, created_by) VALUES (?, ?, ?, ?, NOW(), ?)";
+
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(insertUsage)) {
+                ps.setInt(1, stayId);
+                ps.setInt(2, serviceId);
+                ps.setInt(3, quantity);
+                ps.setDouble(4, unitPrice);
+                if (currentUserId != null) {
+                    ps.setInt(5, currentUserId);
+                } else {
+                    ps.setNull(5, Types.INTEGER);
+                }
+                ps.executeUpdate();
+            }
+            conn.commit();
+            return true;
+        } catch (SQLException ex) {
+            System.err.println("Lỗi thêm service usage: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private boolean performCheckout(StayRow stayRow, CheckoutSummary summary, double discountAmount, String paymentMethod) {
         if (stayRow == null || stayRow.getStayId() <= 0) {
             return false;
         }
@@ -853,7 +1031,7 @@ public class StayManagementPanel extends JPanel {
         final String invoiceCode = "INV" + System.currentTimeMillis();
         String checkExistingInvoice = "SELECT COUNT(*) FROM invoices WHERE stay_id = ?";
         String checkStayStatus = "SELECT status FROM stays WHERE stay_id = ?";
-        String invoiceInsert = "INSERT INTO invoices (invoice_code, stay_id, room_amount, service_amount, discount_amount, tax_amount, total_amount, status, created_by) VALUES (?, ?, ?, ?, 0, 0, ?, 'UNPAID', ?)";
+        String invoiceInsert = "INSERT INTO invoices (invoice_code, stay_id, room_amount, service_amount, discount_amount, tax_amount, total_amount, status, created_by) VALUES (?, ?, ?, ?, ?, 0, ?, 'PAID', ?)";
         String invoiceDetailRoom = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'ROOM', ?, ?, ?, ?)";
         String invoiceDetailService = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'SERVICE', ?, ?, ?, ?)";
         String paymentInsert = "INSERT INTO payments (invoice_id, amount, payment_method, payment_date, note, received_by) VALUES (?, ?, ?, NOW(), ?, ?)";
@@ -891,11 +1069,12 @@ public class StayManagementPanel extends JPanel {
                 invoicePs.setInt(2, stayRow.getStayId());
                 invoicePs.setDouble(3, summary.getRoomAmount());
                 invoicePs.setDouble(4, summary.getServiceAmount());
-                invoicePs.setDouble(5, summary.getTotalAmount());
+                invoicePs.setDouble(5, discountAmount);
+                invoicePs.setDouble(6, Math.max(0, summary.getTotalAmount() - discountAmount));
                 if (currentUserId != null) {
-                    invoicePs.setInt(6, currentUserId);
+                    invoicePs.setInt(7, currentUserId);
                 } else {
-                    invoicePs.setNull(6, Types.INTEGER);
+                    invoicePs.setNull(7, Types.INTEGER);
                 }
                 invoicePs.executeUpdate();
 
@@ -935,7 +1114,7 @@ public class StayManagementPanel extends JPanel {
 
             try (PreparedStatement paymentPs = conn.prepareStatement(paymentInsert)) {
                 paymentPs.setInt(1, invoiceId);
-                paymentPs.setDouble(2, summary.getTotalAmount());
+                paymentPs.setDouble(2, Math.max(0, summary.getTotalAmount() - discountAmount));
                 paymentPs.setString(3, paymentMethod == null ? "CASH" : paymentMethod);
                 paymentPs.setString(4, "Thanh toán khi check-out");
                 if (currentUserId != null) {
@@ -971,6 +1150,21 @@ public class StayManagementPanel extends JPanel {
         } catch (SQLException ex) {
             System.err.println("Lỗi khi thực hiện checkout: " + ex.getMessage());
             return false;
+        }
+    }
+
+    private static final class DiscountOption {
+        private final String label;
+        private final double percentage;
+
+        private DiscountOption(String label, double percentage) {
+            this.label = label;
+            this.percentage = percentage;
+        }
+
+        @Override
+        public String toString() {
+            return label;
         }
     }
 
@@ -1221,9 +1415,17 @@ public class StayManagementPanel extends JPanel {
                     checkin.addActionListener(e -> openCheckInDialog(stayRow));
                     panel.add(checkin);
                 } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
-                    JButton checkout = createActionButton("Check-out", new Color(255, 240, 218), ORANGE, ORANGE);
-                    checkout.addActionListener(e -> openCheckoutDialog(stayRow));
-                    panel.add(checkout);
+                    JButton addServiceBtn = createActionButton("Add Service", new Color(227, 236, 255), BLUE, BLUE);
+                    addServiceBtn.addActionListener(e -> openAddServiceDialog(stayRow));
+                    panel.add(addServiceBtn);
+
+                    JButton checkoutBtn = createActionButton("Check-out", new Color(255, 240, 218), ORANGE, ORANGE);
+                    checkoutBtn.addActionListener(e -> openCheckoutDialog(stayRow));
+                    panel.add(checkoutBtn);
+                } else if ("CHECKED_OUT".equals(stayRow.getStatusCode())) {
+                    JButton viewInvoiceBtn = createActionButton("View Invoice", new Color(245, 247, 255), PRIMARY, PRIMARY);
+                    viewInvoiceBtn.addActionListener(e -> openStayDetailDialog(stayRow));
+                    panel.add(viewInvoiceBtn);
                 }
             }
             return panel;
@@ -1268,12 +1470,26 @@ public class StayManagementPanel extends JPanel {
                     });
                     panel.add(checkinBtn);
                 } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
+                    JButton addServiceBtn = createActionButton("Add Service", new Color(227, 236, 255), BLUE, BLUE);
+                    addServiceBtn.addActionListener(e -> {
+                        openAddServiceDialog(stayRow);
+                        fireEditingStopped();
+                    });
+                    panel.add(addServiceBtn);
+
                     JButton checkoutBtn = createActionButton("Check-out", new Color(255, 240, 218), ORANGE, ORANGE);
                     checkoutBtn.addActionListener(e -> {
                         openCheckoutDialog(stayRow);
                         fireEditingStopped();
                     });
                     panel.add(checkoutBtn);
+                } else if ("CHECKED_OUT".equals(stayRow.getStatusCode())) {
+                    JButton viewInvoiceBtn = createActionButton("View Invoice", new Color(245, 247, 255), PRIMARY, PRIMARY);
+                    viewInvoiceBtn.addActionListener(e -> {
+                        openStayDetailDialog(stayRow);
+                        fireEditingStopped();
+                    });
+                    panel.add(viewInvoiceBtn);
                 }
                 return panel;
             }
