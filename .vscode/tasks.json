@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "package-hotel-management",
+            "type": "shell",
+            "command": "mvn",
+            "args": [
+                "-q",
+                "-DskipTests",
+                "package"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

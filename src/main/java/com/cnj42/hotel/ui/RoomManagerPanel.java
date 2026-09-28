@@ -3,6 +3,8 @@ package com.cnj42.hotel.ui;
 import com.cnj42.hotel.model.Room;
 import com.cnj42.hotel.model.RoomType;
 import com.cnj42.hotel.service.RoomService;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -176,7 +178,11 @@ public class RoomManagerPanel extends JPanel {
         filters.add(statusFilter);
         
         JButton addButton = button("Thêm phòng", PRIMARY, Color.WHITE);
-        addButton.setIcon(new LineIcon("plus", Color.WHITE, 12, 12));
+        FontIcon addIcon = new FontIcon();
+        addIcon.setIkon(FontAwesomeSolid.PLUS);
+        addIcon.setIconColor(Color.WHITE);
+        addIcon.setIconSize(12);
+        addButton.setIcon(addIcon);
         addButton.setPreferredSize(new Dimension(130, 36));
         addButton.addActionListener(e -> addRoomAction.run());
         
@@ -669,28 +675,6 @@ public class RoomManagerPanel extends JPanel {
             g2.dispose();
             super.paintComponent(g);
         }
-    }
-
-    private static class LineIcon implements Icon {
-        private final String type;
-        private final Color color;
-        private final int width;
-        private final int height;
-        LineIcon(String type, Color color, int width, int height) { this.type = type; this.color = color; this.width = width; this.height = height; }
-        @Override public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setColor(color);
-            g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            int cx = x + width / 2;
-            int cy = y + height / 2;
-            if ("plus".equals(type)) {
-                g2.drawLine(cx, y + 2, cx, y + height - 2);
-                g2.drawLine(x + 2, cy, x + width - 2, cy);
-            }
-            g2.dispose();
-        }
-        @Override public int getIconWidth() { return width; }
-        @Override public int getIconHeight() { return height; }
     }
 
     private static class DotIcon implements Icon {

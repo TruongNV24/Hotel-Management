@@ -8,6 +8,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
+import java.sql.SQLException;
 
 public class LoginFrame extends JFrame {
 
@@ -215,6 +216,16 @@ public class LoginFrame extends JFrame {
 
             MainFrame mainFrame = new MainFrame(user);
             mainFrame.setVisible(true);
+
+                } catch (SQLException e) {
+                        System.err.println("Database connection failed during login.");
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(
+                                        this,
+                                        "Database connection failed:\n" + e.getMessage(),
+                                        "Database error",
+                                        JOptionPane.ERROR_MESSAGE
+                        );
 
         } finally {
 

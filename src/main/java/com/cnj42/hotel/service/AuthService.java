@@ -2,6 +2,7 @@ package com.cnj42.hotel.service;
 
 import com.cnj42.hotel.dao.UserDAO;
 import com.cnj42.hotel.model.User;
+import java.sql.SQLException;
 
 public class AuthService {
 
@@ -11,7 +12,7 @@ public class AuthService {
         this.userDAO = new UserDAO();
     }
 
-    public User login(String username, String password) {
+    public User login(String username, String password) throws SQLException {
 
         if (username == null || username.isBlank()) {
             return null;

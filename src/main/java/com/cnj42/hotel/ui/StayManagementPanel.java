@@ -339,31 +339,9 @@ public class StayManagementPanel extends JPanel {
         stayTable.getTableHeader().setReorderingAllowed(false);
         stayTable.setDefaultRenderer(Object.class, new StayStatusRenderer());
         stayTable.getColumnModel().getColumn(ACTION_COL).setCellRenderer(new StayActionRenderer());
-        stayTable.getColumnModel().getColumn(ACTION_COL).setCellEditor(new StayActionEditor());
         stayTable.getColumnModel().getColumn(ACTION_COL).setPreferredWidth(260);
         stayTable.getColumnModel().getColumn(ACTION_COL).setMinWidth(250);
         stayTable.getColumnModel().getColumn(ACTION_COL).setMaxWidth(280);
-
-        stayTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                int row = stayTable.rowAtPoint(e.getPoint());
-                int col = stayTable.columnAtPoint(e.getPoint());
-                if (row < 0 || col != ACTION_COL) {
-                    return;
-                }
-                Object value = stayTable.getValueAt(row, ACTION_COL);
-                if (value instanceof StayRow stayRow) {
-                    if ("WAITING_CHECK_IN".equals(stayRow.getStatusCode())) {
-                        openCheckInDialog(stayRow);
-                    } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
-                        openCheckoutDialog(stayRow);
-                    } else {
-                        openStayDetailDialog(stayRow);
-                    }
-                }
-            }
-        });
 
         stayTable.getColumnModel().getColumn(0).setPreferredWidth(55);
         stayTable.getColumnModel().getColumn(1).setPreferredWidth(130);
@@ -376,12 +354,62 @@ public class StayManagementPanel extends JPanel {
         stayTable.getColumnModel().getColumn(8).setPreferredWidth(140);
         stayTable.getColumnModel().getColumn(9).setPreferredWidth(220);
 
+        stayTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                int row = stayTable.rowAtPoint(event.getPoint());
+                int column = stayTable.columnAtPoint(event.getPoint());
+                if (row < 0 || column != ACTION_COL || event.getClickCount() != 1) {
+                    return;
+                }
+
+                Object value = stayTable.getValueAt(row, ACTION_COL);
+                if (value instanceof StayRow stayRow) {
+                    handleActionClick(stayRow, event.getX() - stayTable.getCellRect(row, ACTION_COL, true).x,
+                            event.getY() - stayTable.getCellRect(row, ACTION_COL, true).y);
+                }
+            }
+        });
+
         JScrollPane scrollPane = new JScrollPane(stayTable);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.getViewport().setBackground(CARD);
         card.add(scrollPane, BorderLayout.CENTER);
 
         return card;
+    }
+
+    private void handleActionClick(StayRow stayRow, int x, int y) {
+        if (x < 8 || x > 252 || y < 4 || y > 80) {
+            return;
+        }
+
+        int buttonColumn = x < 130 ? 0 : 1;
+        int buttonRow = y < 42 ? 0 : 1;
+        int buttonIndex = buttonRow * 2 + buttonColumn;
+
+        if (buttonIndex == 0) {
+            openStayDetailDialog(stayRow);
+            return;
+        }
+
+        if ("WAITING_CHECK_IN".equals(stayRow.getStatusCode())) {
+            if (buttonIndex == 1) {
+                openUpdateReservationDialog(stayRow);
+            } else if (buttonIndex == 2) {
+                cancelReservation(stayRow);
+            } else if (buttonIndex == 3) {
+                openCheckInDialog(stayRow);
+            }
+        } else if ("IN_HOUSE".equals(stayRow.getStatusCode()) || "CHECKOUT_PENDING".equals(stayRow.getStatusCode())) {
+            if (buttonIndex == 1) {
+                openAddServiceDialog(stayRow);
+            } else if (buttonIndex == 2) {
+                openCheckoutDialog(stayRow);
+            }
+        } else if ("CHECKED_OUT".equals(stayRow.getStatusCode()) && buttonIndex == 1) {
+            openStayDetailDialog(stayRow);
+        }
     }
 
     private void refreshStayData() {

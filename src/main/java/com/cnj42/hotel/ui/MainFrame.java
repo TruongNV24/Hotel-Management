@@ -19,6 +19,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.*;
 import java.text.DecimalFormat;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 
 public class MainFrame extends JFrame {
 
@@ -67,6 +69,7 @@ public class MainFrame extends JFrame {
     private JLabel pageTitle;
     private JLabel pageDescription;
     private JPanel activeMenuButton;
+    private JLabel activeMenuIcon;
 
     // Dashboard statistics
     private JLabel totalRoomsLabel;
@@ -197,21 +200,21 @@ public class MainFrame extends JFrame {
         menu.setBorder(new EmptyBorder(5, 12, 5, 12));
         menu.setLayout(new BoxLayout(menu, BoxLayout.Y_AXIS));
 
-        addMenuButton(menu, "🏠", "Dashboard", true, this::showDashboard);
+        addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
 
         addSectionTitle(menu, "QUẢN LÝ");
 
-        addMenuButton(menu, "🛏", "Quản lý danh mục phòng", false, this::showRoomManagement);
+        addMenuButton(menu, FontAwesomeSolid.BED, "Quản lý danh mục phòng", false, this::showRoomManagement);
         if (currentUser != null && "ADMIN".equalsIgnoreCase(currentUser.getRole())) {
-            addMenuButton(menu, "👤", "Quản lý tài khoản", false, this::showAccountManagement);
+            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, this::showAccountManagement);
         } else {
-            addMenuButton(menu, "👤", "Quản lý tài khoản", false, () -> JOptionPane.showMessageDialog(this, "Bạn không có quyền truy cập tính năng này", "Không đủ quyền", JOptionPane.WARNING_MESSAGE));
+            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, () -> JOptionPane.showMessageDialog(this, "Bạn không có quyền truy cập tính năng này", "Không đủ quyền", JOptionPane.WARNING_MESSAGE));
         }
-        addMenuButton(menu, "🧳", "Quản lý lưu trú", false, this::showReservationManagement);
+        addMenuButton(menu, FontAwesomeSolid.SUITCASE, "Quản lý lưu trú", false, this::showReservationManagement);
 
         addSectionTitle(menu, "DỊCH VỤ");
-        addMenuButton(menu, "💳", "Quản lý thanh toán", false, this::showPaymentManagement);
-        addMenuButton(menu, "🧾", "Báo cáo, Thống kê", false, this::showReports);
+        addMenuButton(menu, FontAwesomeSolid.CREDIT_CARD, "Quản lý thanh toán", false, this::showPaymentManagement);
+        addMenuButton(menu, FontAwesomeSolid.CHART_BAR, "Báo cáo, Thống kê", false, this::showReports);
 
         sidebar.add(menu, BorderLayout.CENTER);
 
@@ -224,8 +227,8 @@ public class MainFrame extends JFrame {
         bottom.setBorder(new EmptyBorder(10, 12, 18, 12));
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
 
-        addMenuButton(bottom, "⚙", "Cài đặt", false, () -> openModule("Cài đặt"));
-        addMenuButton(bottom, "↩", "Đăng xuất", false, this::logout);
+        addMenuButton(bottom, FontAwesomeSolid.COG, "Cài đặt", false, () -> openModule("Cài đặt"));
+        addMenuButton(bottom, FontAwesomeSolid.SIGN_OUT_ALT, "Đăng xuất", false, this::logout);
 
         sidebar.add(bottom, BorderLayout.SOUTH);
 
@@ -236,7 +239,7 @@ public class MainFrame extends JFrame {
     // MENU BUTTON
     // =========================================================
 
-    private void addMenuButton(JPanel parent, String icon, String text, boolean selected, Runnable action) {
+    private void addMenuButton(JPanel parent, FontAwesomeSolid iconType, String text, boolean selected, Runnable action) {
 
         JPanel button = new RoundedPanel(selected ? PRIMARY : SIDEBAR, 10);
 
@@ -249,11 +252,16 @@ public class MainFrame extends JFrame {
         button.setPreferredSize(new Dimension(0, 45));
         button.setBorder(new EmptyBorder(0, 12, 0, 10));
 
+        FontIcon icon = new FontIcon();
+        icon.setIkon(iconType);
+        icon.setIconSize(18);
+        icon.setIconColor(selected ? Color.WHITE : new Color(180, 183, 198));
         JLabel iconLabel = new JLabel(icon);
         iconLabel.setPreferredSize(new Dimension(30, 0));
         iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
-        iconLabel.setForeground(selected ? Color.WHITE : new Color(180, 183, 198));
+        if (selected) {
+            activeMenuIcon = iconLabel;
+        }
 
         JLabel textLabel = new JLabel(text);
         textLabel.setFont(new Font("Segoe UI", selected ? Font.BOLD : Font.PLAIN, 13));
@@ -314,8 +322,13 @@ public class MainFrame extends JFrame {
         if (activeMenuButton instanceof RoundedPanel) {
             ((RoundedPanel) activeMenuButton).setBackgroundColor(SIDEBAR);
         }
+        if (activeMenuIcon != null) {
+            ((FontIcon) activeMenuIcon.getIcon()).setIconColor(new Color(180, 183, 198));
+        }
 
         activeMenuButton = button;
+        activeMenuIcon = (JLabel) button.getComponent(0);
+        ((FontIcon) activeMenuIcon.getIcon()).setIconColor(Color.WHITE);
         ((RoundedPanel) button).setBackgroundColor(PRIMARY);
         button.repaint();
     }
@@ -1482,144 +1495,26 @@ public class MainFrame extends JFrame {
         return new Color(c.getRed(), c.getGreen(), c.getBlue(), alpha);
     }
 
-    // =========================================================
-    // VECTOR ICONS (drawn instead of emoji so rendering is
-    // crisp and identical on every machine / font setup)
-    // =========================================================
-
     private JComponent createVectorIcon(String type, Color color, int size) {
-
-        JComponent icon = new JComponent() {
-            @Override
-            protected void paintComponent(Graphics g) {
-
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(color);
-
-                float strokeWidth = Math.max(1.5f, getWidth() * 0.09f);
-                g2.setStroke(new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-                int s = Math.min(getWidth(), getHeight());
-
-                switch (type) {
-                    case "building" -> paintBuilding(g2, s);
-                    case "check" -> paintCheck(g2, s);
-                    case "person" -> paintPerson(g2, s);
-                    case "calendar" -> paintCalendar(g2, s);
-                    case "menu" -> paintMenu(g2, s);
-                    case "bell" -> paintBell(g2, s);
-                    case "chevron" -> paintChevron(g2, s);
-                    default -> {
-                        // no-op: unknown icon type
-                    }
-                }
-
-                g2.dispose();
-            }
+        FontAwesomeSolid ikon = switch (type) {
+            case "building" -> FontAwesomeSolid.BUILDING;
+            case "check" -> FontAwesomeSolid.CHECK;
+            case "person" -> FontAwesomeSolid.USER;
+            case "calendar" -> FontAwesomeSolid.CALENDAR_ALT;
+            case "menu" -> FontAwesomeSolid.BARS;
+            case "bell" -> FontAwesomeSolid.BELL;
+            case "chevron" -> FontAwesomeSolid.CHEVRON_DOWN;
+            default -> throw new IllegalArgumentException("Unknown icon type: " + type);
         };
 
-        icon.setPreferredSize(new Dimension(size, size));
-        icon.setOpaque(false);
-        return icon;
-    }
-
-    private void paintBuilding(Graphics2D g2, int s) {
-
-        int pad = (int) (s * 0.16);
-        int bx = pad;
-        int by = (int) (s * 0.10);
-        int bw = s - 2 * pad;
-        int bh = s - by - pad;
-
-        g2.drawRoundRect(bx, by, bw, bh, (int) (s * 0.10), (int) (s * 0.10));
-
-        int winW = (int) (bw * 0.20);
-        int winH = (int) (bh * 0.12);
-
-        for (int row = 1; row <= 3; row++) {
-            for (int col = 1; col <= 2; col++) {
-                int wx = bx + (bw * col) / 3 - winW / 2;
-                int wy = by + (bh * row) / 5 - winH / 2;
-                g2.fillRoundRect(wx, wy, winW, winH, 1, 1);
-            }
-        }
-    }
-
-    private void paintCheck(Graphics2D g2, int s) {
-
-        int[] xs = {(int) (s * 0.20), (int) (s * 0.42), (int) (s * 0.82)};
-        int[] ys = {(int) (s * 0.52), (int) (s * 0.72), (int) (s * 0.28)};
-
-        g2.drawPolyline(xs, ys, 3);
-    }
-
-    private void paintPerson(Graphics2D g2, int s) {
-
-        int headD = (int) (s * 0.36);
-        int headX = s / 2 - headD / 2;
-        int headY = (int) (s * 0.10);
-
-        g2.drawOval(headX, headY, headD, headD);
-
-        int bodyW = (int) (s * 0.62);
-        int bodyX = s / 2 - bodyW / 2;
-        int bodyY = headY + headD + (int) (s * 0.06);
-        int bodyH = (int) (s * 0.44);
-
-        g2.drawArc(bodyX, bodyY, bodyW, bodyH * 2, 0, 180);
-    }
-
-    private void paintCalendar(Graphics2D g2, int s) {
-
-        int cx = (int) (s * 0.14);
-        int cy = (int) (s * 0.22);
-        int cw = s - 2 * cx;
-        int ch = s - cy - (int) (s * 0.12);
-
-        g2.drawRoundRect(cx, cy, cw, ch, (int) (s * 0.10), (int) (s * 0.10));
-        g2.drawLine(cx, cy + (int) (ch * 0.32), cx + cw, cy + (int) (ch * 0.32));
-
-        g2.drawLine(cx + (int) (cw * 0.25), cy - (int) (s * 0.08), cx + (int) (cw * 0.25), cy + (int) (s * 0.04));
-        g2.drawLine(cx + (int) (cw * 0.75), cy - (int) (s * 0.08), cx + (int) (cw * 0.75), cy + (int) (s * 0.04));
-
-        int dotSize = Math.max(2, (int) (s * 0.09));
-        g2.fillOval(cx + cw / 2 - dotSize / 2, cy + (int) (ch * 0.55), dotSize, dotSize);
-    }
-
-    private void paintMenu(Graphics2D g2, int s) {
-
-        int lineW = (int) (s * 0.78);
-        int lx = (s - lineW) / 2;
-        int spacing = s / 4;
-
-        g2.drawLine(lx, s / 2 - spacing, lx + lineW, s / 2 - spacing);
-        g2.drawLine(lx, s / 2, lx + lineW, s / 2);
-        g2.drawLine(lx, s / 2 + spacing, lx + lineW, s / 2 + spacing);
-    }
-
-    private void paintBell(Graphics2D g2, int s) {
-
-        Path2D path = new Path2D.Double();
-        path.moveTo(s * 0.50, s * 0.10);
-        path.curveTo(s * 0.24, s * 0.10, s * 0.20, s * 0.44, s * 0.18, s * 0.64);
-        path.lineTo(s * 0.82, s * 0.64);
-        path.curveTo(s * 0.80, s * 0.44, s * 0.76, s * 0.10, s * 0.50, s * 0.10);
-        path.closePath();
-
-        g2.draw(path);
-        g2.drawLine((int) (s * 0.34), (int) (s * 0.70), (int) (s * 0.66), (int) (s * 0.70));
-
-        int clapper = Math.max(3, (int) (s * 0.14));
-        g2.fillOval(s / 2 - clapper / 2, (int) (s * 0.74), clapper, clapper);
-    }
-
-    private void paintChevron(Graphics2D g2, int s) {
-
-        int[] xs = {(int) (s * 0.18), s / 2, (int) (s * 0.82)};
-        int[] ys = {(int) (s * 0.32), (int) (s * 0.68), (int) (s * 0.32)};
-
-        g2.drawPolyline(xs, ys, 3);
+        FontIcon icon = new FontIcon();
+        icon.setIkon(ikon);
+        icon.setIconColor(color);
+        icon.setIconSize(size);
+        JLabel label = new JLabel(icon);
+        label.setPreferredSize(new Dimension(size, size));
+        label.setOpaque(false);
+        return label;
     }
 
     // =========================================================

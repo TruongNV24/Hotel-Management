@@ -6,6 +6,14 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Hotel Management",
+            "request": "launch",
+            "mainClass": "com.cnj42.hotel.ui.LoginFrame",
+            "projectName": "Hotel-Management",
+            "preLaunchTask": "package-hotel-management"
+        },
+        {
+            "type": "java",
             "name": "Current File",
             "request": "launch",
             "mainClass": "${file}"

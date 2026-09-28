@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 
 /**
  * "Thêm phòng" panel — matches the reference design:
@@ -287,7 +289,7 @@ public class AddRoomPanel extends JPanel {
         dropZone.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
         dropZone.setPreferredSize(new Dimension(300, 160));
 
-        JLabel cloudIcon = new JLabel(new LineIcon("upload", PRIMARY, 36, 36));
+        JLabel cloudIcon = new JLabel(createAmenityIcon("upload", PRIMARY, 36));
         cloudIcon.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel dropLabel = new JLabel("Kéo thả hình ảnh vào đây");
@@ -493,7 +495,7 @@ public class AddRoomPanel extends JPanel {
         checkBox.setOpaque(false);
         amenityChecks.put(name, checkBox);
 
-        JLabel iconLabel = new JLabel(new LineIcon(icon, TEXT_GRAY, 16, 16));
+        JLabel iconLabel = new JLabel(createAmenityIcon(icon, TEXT_GRAY, 16));
 
         JLabel nameLabel = new JLabel(name);
         nameLabel.setFont(FONT_REGULAR);
@@ -521,7 +523,7 @@ public class AddRoomPanel extends JPanel {
         otherAmenityField.setPreferredSize(new Dimension(150, 30));
 
         cell.add(checkBox);
-        cell.add(new JLabel(new LineIcon(icon, TEXT_GRAY, 16, 16)));
+        cell.add(new JLabel(createAmenityIcon(icon, TEXT_GRAY, 16)));
         cell.add(nameLabel);
         cell.add(otherAmenityField);
         return cell;
@@ -742,7 +744,7 @@ public class AddRoomPanel extends JPanel {
     }
 
     private JLabel sectionHeader(String icon, String text) {
-        JLabel label = new JLabel(text, new LineIcon(icon, PRIMARY, 15, 15), SwingConstants.LEFT);
+        JLabel label = new JLabel(text, createAmenityIcon(icon, PRIMARY, 15), SwingConstants.LEFT);
         label.setIconTextGap(8);
         label.setFont(FONT_SECTION);
         label.setForeground(PRIMARY);
@@ -884,124 +886,31 @@ public class AddRoomPanel extends JPanel {
         public int getIconHeight() { return size + 4; }
     }
 
-    private static class LineIcon implements Icon {
-        private final String type;
-        private final Color color;
-        private final int width;
-        private final int height;
-
-        LineIcon(String type, Color color, int width, int height) {
-            this.type = type;
-            this.color = color;
-            this.width = width;
-            this.height = height;
-        }
-
-        @Override
-        public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setColor(color);
-            g2.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            int right = x + width - 2;
-            int bottom = y + height - 2;
-            int centerX = x + width / 2;
-            int centerY = y + height / 2;
-
-            switch (type) {
-                case "building" -> {
-                    g2.drawRect(x + 3, y + 2, width - 6, height - 4);
-                    g2.drawLine(centerX, y + 2, centerX, bottom);
-                    g2.drawLine(x + 3, y + 6, right, y + 6);
-                    g2.drawLine(x + 3, y + 10, right, y + 10);
-                }
-                case "image" -> {
-                    g2.drawRect(x + 2, y + 3, width - 4, height - 6);
-                    g2.drawOval(x + 5, y + 5, 3, 3);
-                    g2.drawLine(x + 4, bottom - 3, x + 8, y + 8);
-                    g2.drawLine(x + 8, y + 8, right - 3, bottom - 3);
-                }
-                case "star" -> {
-                    Polygon star = new Polygon();
-                    for (int i = 0; i < 10; i++) {
-                        double angle = -Math.PI / 2 + i * Math.PI / 5;
-                        int radius = i % 2 == 0 ? width / 2 - 1 : width / 4;
-                        star.addPoint(centerX + (int) (Math.cos(angle) * radius),
-                                centerY + (int) (Math.sin(angle) * radius));
-                    }
-                    g2.fillPolygon(star);
-                }
-                case "upload" -> {
-                    g2.drawArc(x + 3, y + 8, width - 6, height - 10, 20, 140);
-                    g2.drawLine(centerX, y + 4, centerX, y + 21);
-                    g2.drawLine(centerX, y + 4, centerX - 5, y + 9);
-                    g2.drawLine(centerX, y + 4, centerX + 5, y + 9);
-                }
-                case "wifi" -> {
-                    g2.drawArc(x + 2, y + 2, width - 4, height + 5, 35, 110);
-                    g2.drawArc(x + 5, y + 6, width - 10, height - 1, 35, 110);
-                    g2.fillOval(centerX - 1, bottom - 2, 3, 3);
-                }
-                case "snowflake" -> {
-                    g2.drawLine(centerX, y + 2, centerX, bottom);
-                    g2.drawLine(x + 2, centerY, right, centerY);
-                    g2.drawLine(x + 4, y + 4, right - 4, bottom - 4);
-                    g2.drawLine(right - 4, y + 4, x + 4, bottom - 4);
-                }
-                case "tv" -> {
-                    g2.drawRoundRect(x + 2, y + 3, width - 4, height - 7, 2, 2);
-                    g2.drawLine(centerX, bottom - 3, centerX, bottom);
-                    g2.drawLine(x + 5, bottom, right - 5, bottom);
-                }
-                case "fridge" -> {
-                    g2.drawRoundRect(x + 4, y + 1, width - 8, height - 2, 2, 2);
-                    g2.drawLine(x + 4, centerY, right - 1, centerY);
-                    g2.drawLine(right - 6, y + 4, right - 6, y + 7);
-                }
-                case "heater" -> {
-                    g2.drawRoundRect(x + 4, y + 3, width - 8, height - 5, 2, 2);
-                    g2.drawLine(x + 7, y + 6, x + 7, bottom - 3);
-                    g2.drawLine(centerX, y + 6, centerX, bottom - 3);
-                }
-                case "bath" -> g2.drawArc(x + 2, y + 5, width - 4, height - 6, 180, 180);
-                case "balcony" -> {
-                    g2.drawRect(x + 2, y + 3, width - 4, height - 5);
-                    g2.drawLine(x + 2, centerY, right, centerY);
-                    g2.drawLine(x + 6, centerY, x + 6, bottom);
-                    g2.drawLine(right - 6, centerY, right - 6, bottom);
-                }
-                case "safe" -> {
-                    g2.drawRoundRect(x + 2, y + 2, width - 4, height - 4, 2, 2);
-                    g2.drawOval(centerX - 3, centerY - 3, 6, 6);
-                }
-                case "dryer" -> {
-                    g2.drawOval(x + 2, y + 3, width - 5, height - 7);
-                    g2.drawLine(right - 2, y + 7, right, y + 4);
-                }
-                case "desk" -> {
-                    g2.drawLine(x + 2, y + 5, right, y + 5);
-                    g2.drawLine(x + 5, y + 5, x + 5, bottom);
-                    g2.drawLine(right - 4, y + 5, right - 4, bottom);
-                }
-                case "sofa" -> {
-                    g2.drawRoundRect(x + 2, y + 5, width - 4, height - 6, 2, 2);
-                    g2.drawLine(x + 5, y + 5, x + 5, y + 2);
-                    g2.drawLine(right - 5, y + 5, right - 5, y + 2);
-                }
-                case "plus" -> {
-                    g2.drawOval(x + 2, y + 2, width - 4, height - 4);
-                    g2.drawLine(centerX, y + 5, centerX, bottom - 3);
-                    g2.drawLine(x + 5, centerY, right - 3, centerY);
-                }
-                default -> g2.drawRect(x + 3, y + 3, width - 6, height - 6);
-            }
-            g2.dispose();
-        }
-
-        @Override
-        public int getIconWidth() { return width; }
-
-        @Override
-        public int getIconHeight() { return height; }
+    private static FontIcon createAmenityIcon(String type, Color color, int size) {
+        FontAwesomeSolid iconType = switch (type) {
+            case "building" -> FontAwesomeSolid.BUILDING;
+            case "image" -> FontAwesomeSolid.IMAGE;
+            case "star" -> FontAwesomeSolid.STAR;
+            case "upload" -> FontAwesomeSolid.CLOUD_UPLOAD_ALT;
+            case "wifi" -> FontAwesomeSolid.WIFI;
+            case "snowflake" -> FontAwesomeSolid.SNOWFLAKE;
+            case "tv" -> FontAwesomeSolid.TV;
+            case "fridge" -> FontAwesomeSolid.BOX;
+            case "heater" -> FontAwesomeSolid.FIRE;
+            case "bath" -> FontAwesomeSolid.BATH;
+            case "balcony" -> FontAwesomeSolid.DOOR_OPEN;
+            case "safe" -> FontAwesomeSolid.LOCK;
+            case "dryer" -> FontAwesomeSolid.WIND;
+            case "desk" -> FontAwesomeSolid.DESKTOP;
+            case "sofa" -> FontAwesomeSolid.COUCH;
+            case "plus" -> FontAwesomeSolid.PLUS_CIRCLE;
+            default -> throw new IllegalArgumentException("Unknown room icon type: " + type);
+        };
+        FontIcon icon = new FontIcon();
+        icon.setIkon(iconType);
+        icon.setIconColor(color);
+        icon.setIconSize(size);
+        return icon;
     }
 
     private static class RoundedButton extends JButton {

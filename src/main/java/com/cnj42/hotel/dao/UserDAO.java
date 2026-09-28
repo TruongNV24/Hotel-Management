@@ -24,23 +24,16 @@ public class UserDAO {
             LIMIT 1
             """;
 
-    public User findByUsername(String username) {
-
+    public User findByUsername(String username) throws SQLException {
         try (Connection connection = DBConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(LOGIN_SQL)) {
-
             statement.setString(1, username);
 
             try (ResultSet resultSet = statement.executeQuery()) {
-
                 if (resultSet.next()) {
                     return mapUser(resultSet);
                 }
             }
-
-        } catch (SQLException e) {
-            System.err.println("Lỗi khi tìm user: " + e.getMessage());
-            e.printStackTrace();
         }
 
         return null;
