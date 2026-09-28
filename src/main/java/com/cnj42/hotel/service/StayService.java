@@ -14,6 +14,7 @@ import java.util.Map;
 public class StayService {
 
     private final StayDAO stayDAO = new StayDAO();
+    private final AuditLogService auditLogService = new AuditLogService();
 
     public Map<String, Integer> getStayStats() {
         try {
@@ -40,9 +41,16 @@ public class StayService {
 
     public boolean checkInReservation(int reservationId, int roomId, Integer currentUserId) {
         try {
-            return stayDAO.checkInReservation(reservationId, roomId, currentUserId);
+            boolean ok = stayDAO.checkInReservation(reservationId, roomId, currentUserId);
+            if (ok) {
+                auditLogService.logEvent("STAY_CHECKIN_SUCCESS", "STAY", "STAY", reservationId, null, "Checked in reservation " + reservationId + " into room " + roomId, "127.0.0.1", "SUCCESS");
+            } else {
+                auditLogService.logEvent("STAY_CHECKIN_FAILED", "STAY", "STAY", reservationId, null, "Failed to check in reservation " + reservationId + " into room " + roomId, "127.0.0.1", "FAILED");
+            }
+            return ok;
         } catch (SQLException e) {
             System.err.println("Lỗi check-in lưu trú: " + e.getMessage());
+            auditLogService.logEvent("STAY_CHECKIN_FAILED", "STAY", "STAY", reservationId, null, "Exception checking in reservation " + reservationId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             return false;
         }
     }
@@ -58,9 +66,16 @@ public class StayService {
 
     public boolean checkoutAndCreateInvoice(int stayId, int reservationId, int roomId, String paymentMethod, Integer currentUserId) {
         try {
-            return stayDAO.checkoutAndCreateInvoice(stayId, reservationId, roomId, paymentMethod, currentUserId);
+            boolean ok = stayDAO.checkoutAndCreateInvoice(stayId, reservationId, roomId, paymentMethod, currentUserId);
+            if (ok) {
+                auditLogService.logEvent("STAY_CHECKOUT_SUCCESS", "STAY", "STAY", reservationId, null, "Checked out stay " + stayId + " and created invoice for room " + roomId, "127.0.0.1", "SUCCESS");
+            } else {
+                auditLogService.logEvent("STAY_CHECKOUT_FAILED", "STAY", "STAY", reservationId, null, "Failed checkout for stay " + stayId + " room " + roomId, "127.0.0.1", "FAILED");
+            }
+            return ok;
         } catch (SQLException e) {
             System.err.println("Lỗi checkout lưu trú: " + e.getMessage());
+            auditLogService.logEvent("STAY_CHECKOUT_FAILED", "STAY", "STAY", reservationId, null, "Exception during checkout for stay " + stayId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             return false;
         }
     }

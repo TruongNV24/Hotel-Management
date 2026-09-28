@@ -10,6 +10,13 @@ public class ReportData {
     private int invoiceCount;
     private BigDecimal paidRevenue = BigDecimal.ZERO;
     private int completedReservations;
+    private int serviceUsageCount;
+    private BigDecimal serviceRevenue = BigDecimal.ZERO;
+    private int incidentCount;
+    private int overdueMaintenanceCount;
+    private int maintenanceCount;
+    private int totalMaintenanceMinutes;
+    private double averageMaintenanceMinutes;
     private String errorMessage;
     private int year;
     private Integer month;
@@ -17,6 +24,10 @@ public class ReportData {
     private final List<ReservationStatusRow> reservationStatusRows = new ArrayList<>();
     private final List<RoomStatusRow> roomStatusRows = new ArrayList<>();
     private final List<InvoiceDetailRow> invoiceDetailRows = new ArrayList<>();
+    private final List<ServiceRow> serviceRows = new ArrayList<>();
+    private final List<CountRow> incidentRows = new ArrayList<>();
+    private final List<CountRow> maintenanceRows = new ArrayList<>();
+    private final List<CountRow> auditRows = new ArrayList<>();
 
     public BigDecimal getTotalRevenue() { return totalRevenue; }
     public void setTotalRevenue(BigDecimal totalRevenue) { this.totalRevenue = totalRevenue; }
@@ -26,6 +37,20 @@ public class ReportData {
     public void setPaidRevenue(BigDecimal paidRevenue) { this.paidRevenue = paidRevenue; }
     public int getCompletedReservations() { return completedReservations; }
     public void setCompletedReservations(int completedReservations) { this.completedReservations = completedReservations; }
+    public int getServiceUsageCount() { return serviceUsageCount; }
+    public void setServiceUsageCount(int serviceUsageCount) { this.serviceUsageCount = serviceUsageCount; }
+    public BigDecimal getServiceRevenue() { return serviceRevenue; }
+    public void setServiceRevenue(BigDecimal serviceRevenue) { this.serviceRevenue = serviceRevenue; }
+    public int getIncidentCount() { return incidentCount; }
+    public void setIncidentCount(int incidentCount) { this.incidentCount = incidentCount; }
+    public int getOverdueMaintenanceCount() { return overdueMaintenanceCount; }
+    public void setOverdueMaintenanceCount(int overdueMaintenanceCount) { this.overdueMaintenanceCount = overdueMaintenanceCount; }
+    public int getMaintenanceCount() { return maintenanceCount; }
+    public void setMaintenanceCount(int maintenanceCount) { this.maintenanceCount = maintenanceCount; }
+    public int getTotalMaintenanceMinutes() { return totalMaintenanceMinutes; }
+    public void setTotalMaintenanceMinutes(int totalMaintenanceMinutes) { this.totalMaintenanceMinutes = totalMaintenanceMinutes; }
+    public double getAverageMaintenanceMinutes() { return averageMaintenanceMinutes; }
+    public void setAverageMaintenanceMinutes(double averageMaintenanceMinutes) { this.averageMaintenanceMinutes = averageMaintenanceMinutes; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public int getYear() { return year; }
@@ -36,6 +61,39 @@ public class ReportData {
     public List<ReservationStatusRow> getReservationStatusRows() { return reservationStatusRows; }
     public List<RoomStatusRow> getRoomStatusRows() { return roomStatusRows; }
     public List<InvoiceDetailRow> getInvoiceDetailRows() { return invoiceDetailRows; }
+    public List<ServiceRow> getServiceRows() { return serviceRows; }
+    public List<CountRow> getIncidentRows() { return incidentRows; }
+    public List<CountRow> getMaintenanceRows() { return maintenanceRows; }
+    public List<CountRow> getAuditRows() { return auditRows; }
+
+    public static class ServiceRow {
+        private final String serviceName;
+        private final int usageCount;
+        private final BigDecimal revenue;
+
+        public ServiceRow(String serviceName, int usageCount, BigDecimal revenue) {
+            this.serviceName = serviceName;
+            this.usageCount = usageCount;
+            this.revenue = revenue;
+        }
+
+        public String getServiceName() { return serviceName; }
+        public int getUsageCount() { return usageCount; }
+        public BigDecimal getRevenue() { return revenue; }
+    }
+
+    public static class CountRow {
+        private final String label;
+        private final int count;
+
+        public CountRow(String label, int count) {
+            this.label = label;
+            this.count = count;
+        }
+
+        public String getLabel() { return label; }
+        public int getCount() { return count; }
+    }
 
     public static class RevenueRow {
         private final String month;

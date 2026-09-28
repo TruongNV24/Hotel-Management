@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class ReportDAO {
 
-    private static final String SUMMARY_SQL = "SELECT COALESCE(SUM(total_amount), 0), COUNT(*), "
+    private static final String SUMMARY_SQL = "SELECT COALESCE(SUM(CASE WHEN status <> 'CANCELLED' THEN total_amount ELSE 0 END), 0), COUNT(CASE WHEN status <> 'CANCELLED' THEN 1 END), "
             + "COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_amount ELSE 0 END), 0) "
             + "FROM invoices WHERE YEAR(issued_at) = ?";
     private static final String RESERVATION_SQL = "SELECT status, COUNT(*) FROM reservations GROUP BY status ORDER BY status";
@@ -42,6 +42,10 @@ public class ReportDAO {
             loadReservationRows(connection, report);
             loadRoomStatusRows(connection, report);
             loadInvoiceDetails(connection, report, year, month);
+            loadServiceRows(connection, report, year, month);
+            loadIncidentRows(connection, report, year, month);
+            loadMaintenanceRows(connection, report, year, month);
+            loadAuditRows(connection, report, year, month);
         }
         return report;
     }
@@ -65,6 +69,7 @@ public class ReportDAO {
         String group = month == null ? "MONTH(issued_at)" : "DAY(issued_at)";
         String sql = "SELECT " + group + ", COUNT(*), COALESCE(SUM(total_amount), 0) FROM invoices "
                 + "WHERE YEAR(issued_at) = ?" + (month == null ? "" : " AND MONTH(issued_at) = ?")
+            + " AND status <> 'CANCELLED'"
                 + " GROUP BY " + group + " ORDER BY 1";
         Map<Integer, RevenueValue> revenueByPeriod = new HashMap<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -117,7 +122,7 @@ public class ReportDAO {
     }
 
     private void loadInvoiceDetails(Connection connection, ReportData report, int year, Integer month) throws SQLException {
-        String sql = DETAIL_SQL + (month == null ? "" : " AND MONTH(i.issued_at) = ?")
+        String sql = DETAIL_SQL + " AND i.status <> 'CANCELLED'" + (month == null ? "" : " AND MONTH(i.issued_at) = ?")
                 + " ORDER BY i.issued_at, i.invoice_id, d.invoice_detail_id";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, year);
@@ -133,6 +138,87 @@ public class ReportDAO {
                             result.getBigDecimal(12), result.getBigDecimal(13),
                             paymentDate == null ? "" : paymentDate.toString(), result.getString(15)));
                 }
+            }
+        }
+    }
+
+    private void loadServiceRows(Connection connection, ReportData report, int year, Integer month) throws SQLException {
+        String sql = "SELECT s.service_name, COUNT(*), COALESCE(SUM(su.total_amount), 0) "
+                + "FROM service_usages su JOIN services s ON s.service_id = su.service_id "
+                + "WHERE YEAR(su.used_at) = ?" + (month == null ? "" : " AND MONTH(su.used_at) = ?")
+                + " GROUP BY s.service_id, s.service_name ORDER BY SUM(su.total_amount) DESC";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, year);
+            if (month != null) statement.setInt(2, month);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    report.getServiceRows().add(new ReportData.ServiceRow(result.getString(1), result.getInt(2), result.getBigDecimal(3)));
+                    report.setServiceUsageCount(report.getServiceUsageCount() + result.getInt(2));
+                    report.setServiceRevenue(report.getServiceRevenue().add(result.getBigDecimal(3)));
+                }
+            }
+        }
+    }
+
+    private void loadIncidentRows(Connection connection, ReportData report, int year, Integer month) throws SQLException {
+        String sql = "SELECT status, COUNT(*) FROM incidents WHERE YEAR(reported_at) = ?"
+                + (month == null ? "" : " AND MONTH(reported_at) = ?") + " GROUP BY status ORDER BY status";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, year);
+            if (month != null) statement.setInt(2, month);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    report.getIncidentRows().add(new ReportData.CountRow(result.getString(1), result.getInt(2)));
+                    report.setIncidentCount(report.getIncidentCount() + result.getInt(2));
+                }
+            }
+        }
+    }
+
+    private void loadMaintenanceRows(Connection connection, ReportData report, int year, Integer month) throws SQLException {
+        String sql = "SELECT status, COUNT(*) FROM maintenance_requests WHERE YEAR(created_at) = ?"
+                + (month == null ? "" : " AND MONTH(created_at) = ?") + " GROUP BY status ORDER BY status";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, year);
+            if (month != null) statement.setInt(2, month);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    report.getMaintenanceRows().add(new ReportData.CountRow(result.getString(1), result.getInt(2)));
+                    report.setMaintenanceCount(report.getMaintenanceCount() + result.getInt(2));
+                }
+            }
+        }
+
+        String durationSql = "SELECT COALESCE(SUM(duration_minutes), 0), COALESCE(AVG(duration_minutes), 0) "
+                + "FROM maintenance_requests WHERE status = 'COMPLETED' AND YEAR(created_at) = ?"
+                + (month == null ? "" : " AND MONTH(created_at) = ?");
+        try (PreparedStatement statement = connection.prepareStatement(durationSql)) {
+            statement.setInt(1, year);
+            if (month != null) statement.setInt(2, month);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    report.setTotalMaintenanceMinutes(result.getInt(1));
+                    report.setAverageMaintenanceMinutes(result.getDouble(2));
+                }
+            }
+        }
+
+        String overdueSql = "SELECT COUNT(*) FROM maintenance_requests WHERE status = 'IN_PROGRESS' "
+                + "AND expected_end_at IS NOT NULL AND CURRENT_TIMESTAMP > expected_end_at";
+        try (PreparedStatement statement = connection.prepareStatement(overdueSql);
+             ResultSet result = statement.executeQuery()) {
+            if (result.next()) report.setOverdueMaintenanceCount(result.getInt(1));
+        }
+    }
+
+    private void loadAuditRows(Connection connection, ReportData report, int year, Integer month) throws SQLException {
+        String sql = "SELECT action, COUNT(*) FROM audit_logs WHERE YEAR(created_at) = ?"
+                + (month == null ? "" : " AND MONTH(created_at) = ?") + " GROUP BY action ORDER BY COUNT(*) DESC, action";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, year);
+            if (month != null) statement.setInt(2, month);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) report.getAuditRows().add(new ReportData.CountRow(result.getString(1), result.getInt(2)));
             }
         }
     }

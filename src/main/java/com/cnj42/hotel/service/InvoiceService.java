@@ -6,6 +6,8 @@ import java.sql.*;
 
 public class InvoiceService {
 
+    private final AuditLogService auditLogService = new AuditLogService();
+
     /**
      * Tạo hóa đơn cho một lần lưu trú
      * Tính toán tiền phòng dựa trên ngày check-in/check-out và giá loại phòng
@@ -15,23 +17,33 @@ public class InvoiceService {
         String sqlFetch = "SELECT s.stay_id, s.actual_check_in, s.actual_check_out, s.room_id, r.room_number, rt.price_per_night " +
             "FROM stays s JOIN rooms r ON s.room_id = r.room_id JOIN room_types rt ON r.room_type_id = rt.room_type_id WHERE s.stay_id = ?";
 
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement(sqlFetch)) {
+        Connection conn = null;
+        try {
+            conn = DBConnection.getConnection();
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sqlFetch)) {
             ps.setInt(1, stayId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return -1;
+                if (!rs.next()) {
+                    conn.rollback();
+                    return -1;
+                }
                 Timestamp in = rs.getTimestamp("actual_check_in");
                 Timestamp out = rs.getTimestamp("actual_check_out");
                 double price = rs.getDouble("price_per_night");
                 String roomNumber = rs.getString("room_number");
 
-                if (in == null || out == null) return -1;
+                if (in == null || out == null) {
+                    conn.rollback();
+                    return -1;
+                }
                 long millis = out.getTime() - in.getTime();
                 long days = Math.max(1, (int) Math.ceil(millis / (1000.0 * 60 * 60 * 24)));
                 double roomAmount = days * price;
 
                 // Tính tiền dịch vụ
                 double serviceAmount = 0.0;
-                String usagesSql = "SELECT s.service_name, su.quantity, su.unit_price, (su.quantity * su.unit_price) AS amount " +
+                String usagesSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount AS amount " +
                     "FROM service_usages su JOIN services s ON su.service_id = s.service_id WHERE su.stay_id = ?";
                 java.util.List<java.util.Map<String,Object>> usages = new java.util.ArrayList<>();
                 try (PreparedStatement psu = conn.prepareStatement(usagesSql)) {
@@ -98,14 +110,36 @@ public class InvoiceService {
                                     pd2.executeUpdate();
                                 }
                             }
+                            conn.commit();
+                            auditLogService.logEvent("INVOICE_CREATED", "INVOICE", "INVOICE", invoiceId,
+                                    null, "Created invoice " + invoiceId + " for stay " + stayId, "127.0.0.1", "SUCCESS");
                             return invoiceId;
                         }
                     }
                 }
             }
+            }
         } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackException) {
+                    System.err.println("Lỗi rollback tạo hóa đơn: " + rollbackException.getMessage());
+                }
+            }
+            auditLogService.logEvent("INVOICE_CREATE_FAILED", "INVOICE", "INVOICE", stayId,
+                    null, "Exception creating invoice for stay " + stayId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi khi tạo hóa đơn: " + e.getMessage());
             e.printStackTrace();
+        }
+        finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException closeException) {
+                    System.err.println("Lỗi đóng kết nối tạo hóa đơn: " + closeException.getMessage());
+                }
+            }
         }
         return -1;
     }
@@ -122,8 +156,15 @@ public class InvoiceService {
             ps.setDouble(1, discountAmount);
             ps.setDouble(2, discountAmount);
             ps.setInt(3, invoiceId);
-            return ps.executeUpdate() > 0;
+            boolean ok = ps.executeUpdate() > 0;
+            if (ok) {
+                auditLogService.logEvent("INVOICE_DISCOUNT_APPLIED", "INVOICE", "INVOICE", invoiceId,
+                        null, "Applied voucher discount " + discountAmount + " to invoice " + invoiceId, "127.0.0.1", "SUCCESS");
+            }
+            return ok;
         } catch (SQLException e) {
+            auditLogService.logEvent("INVOICE_DISCOUNT_FAILED", "INVOICE", "INVOICE", invoiceId,
+                    null, "Exception applying discount to invoice " + invoiceId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi áp dụng mã giảm giá: " + e.getMessage());
             e.printStackTrace();
             return false;
@@ -139,8 +180,14 @@ public class InvoiceService {
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, invoiceId);
             int rowsAffected = ps.executeUpdate();
+            if (rowsAffected > 0) {
+                auditLogService.logEvent("INVOICE_CANCELLED", "INVOICE", "INVOICE", invoiceId,
+                        null, "Cancelled invoice " + invoiceId, "127.0.0.1", "SUCCESS");
+            }
             return rowsAffected > 0;
         } catch (SQLException e) {
+            auditLogService.logEvent("INVOICE_CANCEL_FAILED", "INVOICE", "INVOICE", invoiceId,
+                    null, "Exception cancelling invoice " + invoiceId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi hủy hóa đơn: " + e.getMessage());
             e.printStackTrace();
             return false;
@@ -203,6 +250,8 @@ public class InvoiceService {
                 }
                 
                 conn.commit();
+                auditLogService.logEvent("PAYMENT_CONFIRMED", "INVOICE", "PAYMENT", invoiceId,
+                        null, "Confirmed payment amount " + amount + " for invoice " + invoiceId + " using " + method, "127.0.0.1", "SUCCESS");
                 return true;
             }
         } catch (SQLException e) {
@@ -213,6 +262,8 @@ public class InvoiceService {
                     System.err.println("Lỗi rollback thanh toán: " + rollbackEx.getMessage()); 
                 }
             }
+                auditLogService.logEvent("PAYMENT_CONFIRM_FAILED", "INVOICE", "PAYMENT", invoiceId,
+                    null, "Exception confirming payment for invoice " + invoiceId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi xác nhận thanh toán: " + e.getMessage());
             e.printStackTrace();
             return false;

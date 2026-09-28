@@ -179,6 +179,8 @@ CREATE TABLE services (
     price DECIMAL(12,2) NOT NULL,
     status ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
     description VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_service_price
         CHECK (price >= 0)
@@ -192,6 +194,7 @@ CREATE TABLE service_usages (
 
     quantity INT NOT NULL DEFAULT 1,
     unit_price DECIMAL(12,2) NOT NULL,
+    total_amount DECIMAL(12,2) NOT NULL,
 
     used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -217,7 +220,10 @@ CREATE TABLE service_usages (
         CHECK (quantity > 0),
 
     CONSTRAINT chk_usage_unit_price
-        CHECK (unit_price >= 0)
+        CHECK (unit_price >= 0),
+
+    CONSTRAINT chk_usage_total_amount
+        CHECK (total_amount >= 0)
 );
 
 CREATE TABLE invoices (

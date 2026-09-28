@@ -75,7 +75,7 @@ public class DashboardDAO {
     private int[] getRevenueTrend(Connection conn) throws SQLException {
         String sql = "SELECT DATE_FORMAT(issued_at, '%Y-%m') AS month_key, COALESCE(SUM(total_amount), 0) AS total " +
                 "FROM invoices " +
-                "WHERE issued_at >= DATE_SUB(CURRENT_DATE, INTERVAL 5 MONTH) " +
+                "WHERE status <> 'CANCELLED' AND issued_at >= DATE_SUB(CURRENT_DATE, INTERVAL 5 MONTH) " +
                 "GROUP BY DATE_FORMAT(issued_at, '%Y-%m') " +
                 "ORDER BY month_key ASC";
 
@@ -103,7 +103,7 @@ public class DashboardDAO {
 
     private long getMonthlyRevenue(Connection conn) throws SQLException {
         String sql = "SELECT COALESCE(SUM(total_amount), 0) FROM invoices " +
-                "WHERE MONTH(issued_at) = MONTH(CURRENT_DATE) AND YEAR(issued_at) = YEAR(CURRENT_DATE)";
+                "WHERE status <> 'CANCELLED' AND MONTH(issued_at) = MONTH(CURRENT_DATE) AND YEAR(issued_at) = YEAR(CURRENT_DATE)";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
@@ -113,7 +113,7 @@ public class DashboardDAO {
 
     private long getPreviousMonthRevenue(Connection conn) throws SQLException {
         String sql = "SELECT COALESCE(SUM(total_amount), 0) FROM invoices " +
-                "WHERE MONTH(issued_at) = MONTH(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)) " +
+                "WHERE status <> 'CANCELLED' AND MONTH(issued_at) = MONTH(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)) " +
                 "AND YEAR(issued_at) = YEAR(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH))";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql);

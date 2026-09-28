@@ -1,9 +1,12 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.CheckoutSummary;
+import com.cnj42.hotel.model.Service;
 import com.cnj42.hotel.model.ServiceUsage;
 import com.cnj42.hotel.model.StayDetail;
 import com.cnj42.hotel.service.ReservationService;
+import com.cnj42.hotel.service.ServiceService;
+import com.cnj42.hotel.service.ServiceUsageService;
 import com.cnj42.hotel.service.StayService;
 import com.cnj42.hotel.utils.DBConnection;
 
@@ -53,6 +56,8 @@ public class StayManagementPanel extends JPanel {
 
     private final StayService stayService = new StayService();
     private final ReservationService reservationService = new ReservationService();
+    private final ServiceService serviceService = new ServiceService();
+    private final ServiceUsageService serviceUsageService = new ServiceUsageService();
     private final Integer currentUserId;
     private DefaultTableModel tableModel;
     private JTable stayTable;
@@ -883,7 +888,7 @@ public class StayManagementPanel extends JPanel {
                 "JOIN rooms rm ON rm.room_id = s.room_id " +
                 "JOIN room_types rt ON rt.room_type_id = rm.room_type_id " +
                 "WHERE s.stay_id = ? AND s.room_id = ?";
-        String serviceSql = "SELECT COALESCE(SUM(su.quantity * su.unit_price), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
+        String serviceSql = "SELECT COALESCE(SUM(su.total_amount), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
 
         BigDecimal roomAmount = BigDecimal.ZERO;
         BigDecimal serviceAmount = BigDecimal.ZERO;
@@ -940,20 +945,12 @@ public class StayManagementPanel extends JPanel {
         panel.setBackground(CARD);
 
         JLabel serviceLabel = new JLabel("Dịch vụ:");
-        JComboBox<String> serviceCombo = new JComboBox<>();
+        JComboBox<Service> serviceCombo = new JComboBox<>();
         JLabel quantityLabel = new JLabel("Số lượng:");
         JTextField quantityField = new JTextField("1");
 
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT service_id, service_name, price FROM services WHERE status = 'ACTIVE' ORDER BY service_name")) {
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    serviceCombo.addItem(rs.getString("service_name") + " | " + formatCurrency(rs.getDouble("price")));
-                }
-            }
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Không tải được dịch vụ: " + e.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
-            return;
+        for (Service service : serviceService.search(null, "ACTIVE")) {
+            serviceCombo.addItem(service);
         }
 
         panel.add(serviceLabel);
@@ -972,25 +969,9 @@ public class StayManagementPanel extends JPanel {
 
         cancel.addActionListener(e -> dialog.dispose());
         confirm.addActionListener(e -> {
-            String selected = (String) serviceCombo.getSelectedItem();
-            if (selected == null || selected.isBlank()) {
+            Service selected = (Service) serviceCombo.getSelectedItem();
+            if (selected == null) {
                 JOptionPane.showMessageDialog(this, "Vui lòng chọn dịch vụ.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            int serviceId = -1;
-            double price = 0;
-              try (Connection conn = DBConnection.getConnection();
-                  PreparedStatement ps = conn.prepareStatement("SELECT service_id, price FROM services WHERE service_name = ? AND status = 'ACTIVE'")) {
-                 ps.setString(1, selected.split("\\|")[0].trim());
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        serviceId = rs.getInt("service_id");
-                        price = rs.getDouble("price");
-                    }
-                }
-            } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Không thể xác định dịch vụ: " + ex.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
@@ -1005,8 +986,8 @@ public class StayManagementPanel extends JPanel {
                 return;
             }
 
-            boolean saved = performAddService(stayRow.getStayId(), serviceId, quantity, price, currentUserId);
-            if (saved) {
+            int usageId = serviceUsageService.create(stayRow.getStayId(), selected.getServiceId(), quantity, null, currentUserId);
+            if (usageId > 0) {
                 JOptionPane.showMessageDialog(this, "Thêm dịch vụ thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 dialog.dispose();
                 refreshStayData();
@@ -1020,35 +1001,6 @@ public class StayManagementPanel extends JPanel {
         dialog.pack();
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
-    }
-
-    private boolean performAddService(int stayId, int serviceId, int quantity, double unitPrice, Integer currentUserId) {
-        if (stayId <= 0 || serviceId <= 0 || quantity <= 0) {
-            return false;
-        }
-
-        String insertUsage = "INSERT INTO service_usages (stay_id, service_id, quantity, unit_price, used_at, created_by) VALUES (?, ?, ?, ?, NOW(), ?)";
-
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setAutoCommit(false);
-            try (PreparedStatement ps = conn.prepareStatement(insertUsage)) {
-                ps.setInt(1, stayId);
-                ps.setInt(2, serviceId);
-                ps.setInt(3, quantity);
-                ps.setDouble(4, unitPrice);
-                if (currentUserId != null) {
-                    ps.setInt(5, currentUserId);
-                } else {
-                    ps.setNull(5, Types.INTEGER);
-                }
-                ps.executeUpdate();
-            }
-            conn.commit();
-            return true;
-        } catch (SQLException ex) {
-            System.err.println("Lỗi thêm service usage: " + ex.getMessage());
-            return false;
-        }
     }
 
     private boolean performCheckout(StayRow stayRow, CheckoutSummary summary, double discountAmount, String paymentMethod) {
@@ -1066,7 +1018,7 @@ public class StayManagementPanel extends JPanel {
         String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
         String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
         String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
-        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, (su.quantity * su.unit_price) AS total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
+        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
 
         try (Connection conn = DBConnection.getConnection()) {
             conn.setAutoCommit(false);

@@ -2,6 +2,8 @@ package com.cnj42.hotel.service;
 
 import com.cnj42.hotel.dao.ReportDAO;
 import com.cnj42.hotel.model.ReportData;
+import com.cnj42.hotel.model.User;
+import com.cnj42.hotel.service.PermissionService;
 
 import java.sql.SQLException;
 import java.io.File;
@@ -21,6 +23,15 @@ public class ReportService {
     private final ReportDAO reportDAO = new ReportDAO();
 
     public ReportData getReportData(int year, Integer month) {
+        return getReportData(year, month, null);
+    }
+
+    public ReportData getReportData(int year, Integer month, User actor) {
+        if (actor == null || !PermissionService.canAccessReports(actor)) {
+            ReportData denied = new ReportData();
+            denied.setErrorMessage("Bạn không có quyền xem báo cáo.");
+            return denied;
+        }
         try {
             return reportDAO.getReportData(year, month);
         } catch (SQLException exception) {

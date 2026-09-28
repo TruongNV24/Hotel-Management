@@ -1,0 +1,35 @@
+USE hotel_management;
+
+CREATE TABLE IF NOT EXISTS maintenance_requests (
+    maintenance_id INT AUTO_INCREMENT PRIMARY KEY,
+    room_id INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    maintenance_type VARCHAR(30) NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+    reported_by INT NOT NULL,
+    assigned_to INT NULL,
+    started_at DATETIME NULL,
+    expected_end_at DATETIME NULL,
+    completed_at DATETIME NULL,
+    duration_minutes INT NULL,
+    resolution TEXT NULL,
+    notes TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_maintenance_type CHECK (maintenance_type IN ('PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'OTHER')),
+    CONSTRAINT chk_maintenance_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+    CONSTRAINT chk_maintenance_status CHECK (status IN ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+    CONSTRAINT chk_maintenance_duration CHECK (duration_minutes IS NULL OR duration_minutes >= 0),
+    CONSTRAINT fk_maintenance_room FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+    CONSTRAINT fk_maintenance_reported_by FOREIGN KEY (reported_by) REFERENCES users(user_id),
+    CONSTRAINT fk_maintenance_assigned_to FOREIGN KEY (assigned_to) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_maintenance_room (room_id),
+    INDEX idx_maintenance_status (status),
+    INDEX idx_maintenance_priority (priority),
+    INDEX idx_maintenance_started_at (started_at),
+    INDEX idx_maintenance_expected_end_at (expected_end_at),
+    INDEX idx_maintenance_assigned_to (assigned_to)
+);

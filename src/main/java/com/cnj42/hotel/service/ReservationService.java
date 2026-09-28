@@ -1,5 +1,7 @@
 package com.cnj42.hotel.service;
 
+import com.cnj42.hotel.dao.UserDAO;
+import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.model.Reservation;
 import com.cnj42.hotel.utils.DBConnection;
 
@@ -12,6 +14,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ReservationService {
+
+    private User findUserById(Integer userId) {
+        if (userId == null) {
+            return null;
+        }
+
+        try {
+            return new UserDAO().findById(userId);
+        } catch (SQLException e) {
+            System.err.println("Lỗi tải thông tin user cho audit log: " + e.getMessage());
+            return null;
+        }
+    }
 
     public List<Reservation> listReservations(String keyword, String status) {
         List<Reservation> list = new ArrayList<>();
@@ -151,12 +166,20 @@ public class ReservationService {
     }
 
     public boolean cancelReservation(int reservationId, int roomId) {
+        return cancelReservation(reservationId, roomId, null);
+    }
+
+    public boolean cancelReservation(int reservationId, int roomId, Integer actingUserId) {
         String fetchStatus = "SELECT status FROM reservations WHERE reservation_id = ?";
         String updateReservation = "UPDATE reservations SET status = 'CANCELLED' WHERE reservation_id = ? AND status IN ('PENDING', 'CONFIRMED')";
         Connection conn = null;
+        User actingUser = null;
         try {
             conn = DBConnection.getConnection();
             conn.setAutoCommit(false);
+            if (actingUserId != null) {
+                actingUser = new UserDAO().findById(actingUserId);
+            }
 
             String currentStatus = null;
             try (PreparedStatement ps = conn.prepareStatement(fetchStatus)) {
@@ -177,12 +200,16 @@ public class ReservationService {
                 ps.setInt(1, reservationId);
                 if (ps.executeUpdate() == 0) {
                     conn.rollback();
+                    new AuditLogService().logEvent("RESERVATION_CANCEL_FAILED", "RESERVATION", "RESERVATION", reservationId, actingUser,
+                            "Failed to cancel reservation id " + reservationId + " for room " + roomId, "127.0.0.1", "FAILED");
                     return false;
                 }
             }
 
             refreshRoomStatus(conn, roomId, reservationId);
             conn.commit();
+            new AuditLogService().logEvent("RESERVATION_CANCELLED", "RESERVATION", "RESERVATION", reservationId, actingUser,
+                    "Cancelled reservation id " + reservationId + " for room " + roomId, "127.0.0.1", "SUCCESS");
             return true;
         } catch (SQLException e) {
             if (conn != null) {
@@ -191,6 +218,8 @@ public class ReservationService {
                 } catch (SQLException ignored) {
                 }
             }
+            new AuditLogService().logEvent("RESERVATION_CANCEL_FAILED", "RESERVATION", "RESERVATION", reservationId, actingUser,
+                    "Exception cancelling reservation id " + reservationId + " for room " + roomId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi khi hủy reservation: " + e.getMessage());
             return false;
         }
@@ -231,16 +260,19 @@ public class ReservationService {
 
             if (roomId != currentRoomId) {
                 conn.rollback();
+                new AuditLogService().logEvent("CHECKIN_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId), "Room mismatch for check-in reservation " + reservationId, "127.0.0.1", "FAILED");
                 return false;
             }
 
             if (status == null || (!"PENDING".equals(status) && !"CONFIRMED".equals(status))) {
                 conn.rollback();
+                new AuditLogService().logEvent("CHECKIN_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId), "Invalid reservation status for check-in: " + status, "127.0.0.1", "FAILED");
                 return false;
             }
 
             if (!isRoomAvailable(roomId, checkInDate, checkOutDate, reservationId)) {
                 conn.rollback();
+                new AuditLogService().logEvent("CHECKIN_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId), "Room unavailable during check-in " + roomId, "127.0.0.1", "FAILED");
                 return false;
             }
 
@@ -270,6 +302,8 @@ public class ReservationService {
 
             updateRoomStatus(conn, roomId, "OCCUPIED");
             conn.commit();
+                new AuditLogService().logEvent("CHECKIN_SUCCESS", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
+                    "Checked in reservation id " + reservationId + " into room " + roomId, "127.0.0.1", "SUCCESS");
             return true;
         } catch (SQLException e) {
             if (conn != null) {
@@ -278,6 +312,8 @@ public class ReservationService {
                 } catch (SQLException ignored) {
                 }
             }
+                new AuditLogService().logEvent("CHECKIN_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
+                    "Exception during check-in for reservation " + reservationId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi khi check-in: " + e.getMessage());
             return false;
         }
@@ -310,6 +346,8 @@ public class ReservationService {
 
             if (currentRoomId == null || roomId != currentRoomId || !"CHECKED_IN".equals(status)) {
                 conn.rollback();
+                new AuditLogService().logEvent("CHECKOUT_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
+                        "Invalid conditions for checkout reservation " + reservationId, "127.0.0.1", "FAILED");
                 return false;
             }
 
@@ -329,6 +367,8 @@ public class ReservationService {
 
             updateRoomStatus(conn, roomId, "CLEANING");
             conn.commit();
+                new AuditLogService().logEvent("CHECKOUT_SUCCESS", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
+                    "Checked out reservation id " + reservationId + " from room " + roomId, "127.0.0.1", "SUCCESS");
             return true;
         } catch (SQLException e) {
             if (conn != null) {
@@ -337,6 +377,8 @@ public class ReservationService {
                 } catch (SQLException ignored) {
                 }
             }
+                new AuditLogService().logEvent("CHECKOUT_FAILED", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
+                    "Exception during checkout for reservation " + reservationId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi khi check-out: " + e.getMessage());
             return false;
         }
@@ -369,11 +411,17 @@ public class ReservationService {
                         int id = gk.getInt(1);
                         updateRoomStatus(conn, roomId, "RESERVED");
                         conn.commit();
+                        User actor = findUserById(createdBy);
+                        new AuditLogService().logEvent("RESERVATION_CREATED", "RESERVATION", "RESERVATION", id,
+                                actor, "Created reservation id " + id + " for room " + roomId, "127.0.0.1", "SUCCESS");
                         return id;
                     }
                 }
             }
             conn.rollback();
+                User actor = findUserById(createdBy);
+            new AuditLogService().logEvent("RESERVATION_CREATE_FAILED", "RESERVATION", "RESERVATION", null,
+                    actor, "Failed to create reservation for room " + roomId, "127.0.0.1", "FAILED");
         } catch (SQLException e) {
             if (conn != null) {
                 try {
@@ -381,6 +429,9 @@ public class ReservationService {
                 } catch (SQLException ignored) {
                 }
             }
+                User actor = findUserById(createdBy);
+            new AuditLogService().logEvent("RESERVATION_CREATE_FAILED", "RESERVATION", "RESERVATION", null,
+                    actor, "Exception creating reservation for room " + roomId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi khi tạo reservation: " + e.getMessage());
         }
         return -1;
@@ -416,11 +467,17 @@ public class ReservationService {
                         p3.setInt(1, roomId);
                         p3.executeUpdate();
                         conn.commit();
+                        User actor = findUserById(createdBy);
+                        new AuditLogService().logEvent("WALKIN_CHECKIN_SUCCESS", "RESERVATION", "RESERVATION", rid,
+                                actor, "Walk-in check-in created reservation id " + rid + " for room " + roomId, "127.0.0.1", "SUCCESS");
                         return rid;
                     }
                 }
             }
             conn.rollback();
+                User actor = findUserById(createdBy);
+            new AuditLogService().logEvent("WALKIN_CHECKIN_FAILED", "RESERVATION", "RESERVATION", null,
+                    actor, "Failed walk-in check-in for room " + roomId, "127.0.0.1", "FAILED");
         } catch (SQLException e) {
             if (conn != null) {
                 try {
@@ -428,6 +485,9 @@ public class ReservationService {
                 } catch (SQLException ignored) {
                 }
             }
+                User actor = findUserById(createdBy);
+            new AuditLogService().logEvent("WALKIN_CHECKIN_FAILED", "RESERVATION", "RESERVATION", null,
+                    actor, "Exception during walk-in check-in for room " + roomId + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             System.err.println("Lỗi walk-in check-in: " + e.getMessage());
         }
         return -1;

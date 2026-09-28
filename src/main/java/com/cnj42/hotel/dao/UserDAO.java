@@ -1,6 +1,7 @@
 package com.cnj42.hotel.dao;
 
 import com.cnj42.hotel.model.User;
+import com.cnj42.hotel.model.UserRole;
 import com.cnj42.hotel.utils.DBConnection;
 
 import java.sql.Connection;
@@ -39,6 +40,23 @@ public class UserDAO {
         return null;
     }
 
+    public User findById(int userId) throws SQLException {
+        String sql = "SELECT user_id, username, password, full_name, role, phone, email, status FROM users WHERE user_id = ? LIMIT 1";
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, userId);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return mapUser(resultSet);
+                }
+            }
+        }
+
+        return null;
+    }
+
     public java.util.List<User> getAllUsers() throws SQLException {
         String sql = "SELECT user_id, username, password, full_name, role, phone, email, status FROM users ORDER BY username";
         java.util.List<User> users = new java.util.ArrayList<>();
@@ -64,7 +82,7 @@ public class UserDAO {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getPassword());
             stmt.setString(3, user.getFullName());
-            stmt.setString(4, user.getRole());
+            stmt.setString(4, UserRole.toDbRole(user.getRole()));
             stmt.setString(5, user.getPhone());
             stmt.setString(6, user.getEmail());
             stmt.setString(7, user.getStatus());
@@ -82,12 +100,23 @@ public class UserDAO {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getPassword());
             stmt.setString(3, user.getFullName());
-            stmt.setString(4, user.getRole());
+            stmt.setString(4, UserRole.toDbRole(user.getRole()));
             stmt.setString(5, user.getPhone());
             stmt.setString(6, user.getEmail());
             stmt.setString(7, user.getStatus());
             stmt.setInt(8, user.getUserId());
 
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    public boolean updatePasswordHash(int userId, String hashedPassword) throws SQLException {
+        String sql = "UPDATE users SET password = ? WHERE user_id = ?";
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, hashedPassword);
+            stmt.setInt(2, userId);
             return stmt.executeUpdate() > 0;
         }
     }
@@ -111,7 +140,7 @@ public class UserDAO {
         user.setUsername(resultSet.getString("username"));
         user.setPassword(resultSet.getString("password"));
         user.setFullName(resultSet.getString("full_name"));
-        user.setRole(resultSet.getString("role"));
+        user.setRole(UserRole.normalize(resultSet.getString("role")));
         user.setPhone(resultSet.getString("phone"));
         user.setEmail(resultSet.getString("email"));
         user.setStatus(resultSet.getString("status"));

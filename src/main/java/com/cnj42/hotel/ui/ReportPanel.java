@@ -1,6 +1,7 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.ReportData;
+import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.ReportService;
 
 import javax.swing.*;
@@ -20,6 +21,7 @@ public class ReportPanel extends JPanel {
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0");
 
     private final ReportService reportService = new ReportService();
+    private final User currentUser;
     private ReportData currentReport;
     private final JComboBox<Integer> yearBox = new JComboBox<>();
     private final JComboBox<String> monthBox = new JComboBox<>();
@@ -31,9 +33,18 @@ public class ReportPanel extends JPanel {
     private final DefaultTableModel revenueModel = createModel("Tháng", "Số hóa đơn", "Doanh thu");
     private final DefaultTableModel reservationModel = createModel("Trạng thái", "Số đặt phòng", "Tỷ lệ");
     private final DefaultTableModel roomModel = createModel("Trạng thái phòng", "Số phòng");
+    private final DefaultTableModel serviceModel = createModel("Dịch vụ", "Lượt dùng", "Doanh thu");
+    private final DefaultTableModel incidentModel = createModel("Incident status", "Số lượng");
+    private final DefaultTableModel maintenanceModel = createModel("Maintenance status", "Số lượng");
+    private final DefaultTableModel auditModel = createModel("Audit action", "Số lượng");
     private final JLabel statusLabel = new JLabel(" ");
 
     public ReportPanel() {
+        this(null);
+    }
+
+    public ReportPanel(User currentUser) {
+        this.currentUser = currentUser;
         setLayout(new BorderLayout(0, 16));
         setBackground(BACKGROUND);
         setBorder(new EmptyBorder(4, 0, 0, 0));
@@ -87,6 +98,16 @@ public class ReportPanel extends JPanel {
         footer.add(tables, BorderLayout.CENTER);
         footer.add(statusLabel, BorderLayout.SOUTH);
         body.add(footer);
+
+        JPanel operationalTables = new JPanel(new GridLayout(2, 2, 16, 16));
+        operationalTables.setOpaque(false);
+        operationalTables.setPreferredSize(new Dimension(0, 500));
+        operationalTables.add(createTableCard("DỊCH VỤ SỬ DỤNG", serviceModel));
+        operationalTables.add(createTableCard("INCIDENT", incidentModel));
+        operationalTables.add(createTableCard("MAINTENANCE", maintenanceModel));
+        operationalTables.add(createTableCard("AUDIT ACTION", auditModel));
+        body.add(Box.createVerticalStrut(16));
+        body.add(operationalTables);
 
         JScrollPane scrollPane = new JScrollPane(body,
             ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
@@ -162,6 +183,10 @@ public class ReportPanel extends JPanel {
         revenueModel.setRowCount(0);
         reservationModel.setRowCount(0);
         roomModel.setRowCount(0);
+        serviceModel.setRowCount(0);
+        incidentModel.setRowCount(0);
+        maintenanceModel.setRowCount(0);
+        auditModel.setRowCount(0);
         int year = (Integer) yearBox.getSelectedItem();
         Integer month = monthBox.getSelectedIndex() == 0 ? null : monthBox.getSelectedIndex();
         statusLabel.setText("Đang tải dữ liệu báo cáo...");
@@ -169,7 +194,7 @@ public class ReportPanel extends JPanel {
         new SwingWorker<ReportData, Void>() {
             @Override
             protected ReportData doInBackground() {
-                return reportService.getReportData(year, month);
+                return reportService.getReportData(year, month, currentUser);
             }
 
             @Override
@@ -203,10 +228,26 @@ public class ReportPanel extends JPanel {
         for (ReportData.RoomStatusRow row : report.getRoomStatusRows()) {
             roomModel.addRow(new Object[]{row.getStatus(), row.getCount()});
         }
+        for (ReportData.ServiceRow row : report.getServiceRows()) {
+            serviceModel.addRow(new Object[]{row.getServiceName(), row.getUsageCount(), formatMoney(row.getRevenue())});
+        }
+        for (ReportData.CountRow row : report.getIncidentRows()) {
+            incidentModel.addRow(new Object[]{row.getLabel(), row.getCount()});
+        }
+        for (ReportData.CountRow row : report.getMaintenanceRows()) {
+            maintenanceModel.addRow(new Object[]{row.getLabel(), row.getCount()});
+        }
+        for (ReportData.CountRow row : report.getAuditRows()) {
+            auditModel.addRow(new Object[]{row.getLabel(), row.getCount()});
+        }
         chart.setData(report.getRevenueRows(), month == null ? "Doanh thu theo tháng" : "Doanh thu theo ngày");
 
         if (report.getErrorMessage() == null) {
-            statusLabel.setText("Cập nhật lúc " + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()));
+                statusLabel.setText("Cập nhật lúc " + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date())
+                    + " | Dịch vụ: " + report.getServiceUsageCount() + " lượt / " + formatMoney(report.getServiceRevenue())
+                    + " | Incident: " + report.getIncidentCount()
+                    + " | Maintenance quá hạn: " + report.getOverdueMaintenanceCount()
+                    + " | Bảo trì trung bình: " + String.format("%.1f phút", report.getAverageMaintenanceMinutes()));
         } else {
             statusLabel.setText("Không thể tải dữ liệu báo cáo: " + report.getErrorMessage());
         }

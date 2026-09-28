@@ -11,6 +11,10 @@ public class User {
     private String email;
     private String status;
 
+    public String getNormalizedRole() {
+        return UserRole.normalize(role);
+    }
+
     public User() {
     }
 

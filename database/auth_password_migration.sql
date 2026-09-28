@@ -1,0 +1,17 @@
+-- Manual migration: keep legacy users and upgrade plaintext passwords to BCrypt hashes.
+-- This file is advisory only; do not run it automatically.
+-- Recommended workflow:
+-- 1. Back up the users table.
+-- 2. Export current plaintext passwords from a secure admin environment.
+-- 3. Hash them outside SQL using Java + BCrypt or a trusted credential tool.
+-- 4. Update the users table for each account using the BCrypt hash value.
+--
+-- Example:
+-- UPDATE users
+-- SET password = '$2a$12$...' 
+-- WHERE username = 'manager';
+--
+-- Important:
+-- - Do not delete legacy accounts.
+-- - Do not overwrite active hashes with plaintext.
+-- - Prefer application-side migration during login when a legacy plaintext password matches.

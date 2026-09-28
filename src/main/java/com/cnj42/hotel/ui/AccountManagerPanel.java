@@ -1,6 +1,8 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.User;
+import com.cnj42.hotel.model.UserRole;
+import com.cnj42.hotel.service.PermissionService;
 import com.cnj42.hotel.service.UserService;
 
 import javax.swing.*;
@@ -20,8 +22,14 @@ public class AccountManagerPanel extends JPanel {
     private final JTable table;
     private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{"Tất cả", "ACTIVE", "INACTIVE"});
     private final JTextField searchField = new JTextField();
+    private final User currentUser;
 
     public AccountManagerPanel() {
+        this(null);
+    }
+
+    public AccountManagerPanel(User currentUser) {
+        this.currentUser = currentUser;
         setLayout(new BorderLayout(0, 12));
         setBorder(new EmptyBorder(12, 12, 12, 12));
 
@@ -47,7 +55,14 @@ public class AccountManagerPanel extends JPanel {
         controls.add(statusFilter);
 
         JButton addBtn = new JButton("Thêm tài khoản");
-        addBtn.addActionListener(e -> openUserDialog(null));
+        addBtn.setEnabled(PermissionService.canManageUsers(currentUser));
+        addBtn.addActionListener(e -> {
+            if (!PermissionService.canManageUsers(currentUser)) {
+                JOptionPane.showMessageDialog(this, "Bạn không có quyền tạo Manager.", "Không đủ quyền", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            openUserDialog(null);
+        });
         controls.add(addBtn);
 
         top.add(controls, BorderLayout.EAST);
@@ -121,10 +136,18 @@ public class AccountManagerPanel extends JPanel {
             panel.add(delBtn);
             editBtn.addActionListener(e -> {
                 stopCellEditing();
+                if (!PermissionService.canManageUsers(currentUser)) {
+                    JOptionPane.showMessageDialog(AccountManagerPanel.this, "Bạn không có quyền quản lý tài khoản.", "Không đủ quyền", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
                 openUserDialog(loadUserFromRow(editingRow));
             });
             delBtn.addActionListener(e -> {
                 stopCellEditing();
+                if (!PermissionService.canManageUsers(currentUser)) {
+                    JOptionPane.showMessageDialog(AccountManagerPanel.this, "Bạn không có quyền xóa tài khoản.", "Không đủ quyền", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
                 int userId = Integer.parseInt(table.getValueAt(editingRow, 0).toString());
                 deleteUser(userId);
             });
@@ -145,16 +168,16 @@ public class AccountManagerPanel extends JPanel {
         JTextField username = new JTextField();
         JPasswordField password = new JPasswordField();
         JTextField fullname = new JTextField();
-        JComboBox<String> role = new JComboBox<>(new String[]{"ADMIN", "MANAGER", "RECEPTIONIST"});
+        JComboBox<String> role = new JComboBox<>(new String[]{"ADMIN", "MANAGER", "EMPLOYEE"});
         JTextField phone = new JTextField();
         JTextField email = new JTextField();
         JComboBox<String> status = new JComboBox<>(new String[]{"ACTIVE", "INACTIVE"});
 
         if (user != null) {
             username.setText(user.getUsername());
-            password.setText(user.getPassword());
+            password.setText("");
             fullname.setText(user.getFullName());
-            role.setSelectedItem(user.getRole());
+            role.setSelectedItem(UserRole.normalize(user.getRole()));
             phone.setText(user.getPhone());
             email.setText(user.getEmail());
             status.setSelectedItem(user.getStatus());
@@ -179,14 +202,21 @@ public class AccountManagerPanel extends JPanel {
 
         User u = user == null ? new User() : user;
         u.setUsername(username.getText().trim());
-        u.setPassword(new String(password.getPassword()));
+        if (password.getPassword() != null && password.getPassword().length > 0) {
+            u.setPassword(new String(password.getPassword()));
+        }
         u.setFullName(fullname.getText().trim());
         u.setRole(role.getSelectedItem().toString());
         u.setPhone(phone.getText().trim());
         u.setEmail(email.getText().trim());
         u.setStatus(status.getSelectedItem().toString());
 
-        boolean ok = user == null ? userService.createUser(u) : userService.updateUser(u);
+        if (user == null && !PermissionService.canCreateManager(currentUser)) {
+            JOptionPane.showMessageDialog(this, "Chỉ Admin mới có quyền tạo Manager.", "Không đủ quyền", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        boolean ok = user == null ? userService.createUser(u, currentUser) : userService.updateUser(u, currentUser);
         if (ok) {
             refreshUsers();
         } else {

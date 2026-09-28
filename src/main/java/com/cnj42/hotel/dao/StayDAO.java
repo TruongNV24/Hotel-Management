@@ -221,7 +221,7 @@ public class StayDAO {
 
     public CheckoutSummary getCheckoutSummary(int stayId, int roomId) throws SQLException {
         String roomSql = "SELECT rt.price_per_night FROM rooms r JOIN room_types rt ON rt.room_type_id = r.room_type_id WHERE r.room_id = ?";
-        String serviceSql = "SELECT COALESCE(SUM(su.quantity * su.unit_price), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
+        String serviceSql = "SELECT COALESCE(SUM(su.total_amount), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
 
         double roomAmount = 0;
         double serviceAmount = 0;
@@ -258,7 +258,7 @@ public class StayDAO {
         String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
         String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
         String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
-        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, (su.quantity * su.unit_price) AS total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
+        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
 
         CheckoutSummary summary = getCheckoutSummary(stayId, roomId);
 
