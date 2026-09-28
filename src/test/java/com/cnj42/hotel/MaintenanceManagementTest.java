@@ -60,7 +60,7 @@ class MaintenanceManagementTest {
         User admin = user("ADMIN");
         User manager = user("MANAGER");
         User employee = user("EMPLOYEE");
-        assertTrue(PermissionService.canManageMaintenance(admin));
+        assertFalse(PermissionService.canManageMaintenance(admin));
         assertTrue(PermissionService.canManageMaintenance(manager));
         assertFalse(PermissionService.canManageMaintenance(employee));
         assertTrue(PermissionService.canReportMaintenance(employee));

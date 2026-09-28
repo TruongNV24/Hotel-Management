@@ -8,12 +8,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DashboardReportTest {
     @Test
-    void reportAccessIsRestrictedToAdminAndManager() {
+    void reportAccessIsRestrictedToManagerOnly() {
         User admin = user("ADMIN");
         User manager = user("MANAGER");
         User employee = user("EMPLOYEE");
 
-        assertTrue(PermissionService.canAccessReports(admin));
+        assertFalse(PermissionService.canAccessReports(admin));
         assertTrue(PermissionService.canAccessReports(manager));
         assertFalse(PermissionService.canAccessReports(employee));
     }

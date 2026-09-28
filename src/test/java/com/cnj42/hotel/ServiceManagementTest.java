@@ -40,7 +40,7 @@ class ServiceManagementTest {
         User manager = userWithRole("MANAGER");
         User employee = userWithRole("EMPLOYEE");
 
-        assertTrue(PermissionService.canManageServices(admin));
+        assertFalse(PermissionService.canManageServices(admin));
         assertTrue(PermissionService.canManageServices(manager));
         assertFalse(PermissionService.canManageServices(employee));
         assertTrue(PermissionService.canRecordServiceUsage(employee));

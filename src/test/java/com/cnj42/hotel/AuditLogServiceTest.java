@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AuditLogServiceTest {
 
     @Test
-    void canViewAuditLogs_shouldAllowAdminAndManagerOnly() {
+    void canViewAuditLogs_shouldAllowAdminOnly() {
         User admin = new User();
         admin.setRole("ADMIN");
 
@@ -21,7 +21,7 @@ class AuditLogServiceTest {
         employee.setRole("EMPLOYEE");
 
         assertTrue(PermissionService.canViewAuditLogs(admin));
-        assertTrue(PermissionService.canViewAuditLogs(manager));
+        assertFalse(PermissionService.canViewAuditLogs(manager));
         assertFalse(PermissionService.canViewAuditLogs(employee));
         assertFalse(PermissionService.canViewAuditLogs(null));
     }

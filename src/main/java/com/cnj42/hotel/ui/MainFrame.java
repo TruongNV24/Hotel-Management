@@ -2,6 +2,7 @@ package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.DashboardData;
 import com.cnj42.hotel.model.User;
+import com.cnj42.hotel.model.UserRole;
 import com.cnj42.hotel.service.DashboardService;
 import com.cnj42.hotel.service.PermissionService;
 import com.cnj42.hotel.service.RoomService;
@@ -201,23 +202,25 @@ public class MainFrame extends JFrame {
         menu.setBorder(new EmptyBorder(5, 12, 5, 12));
         menu.setLayout(new BoxLayout(menu, BoxLayout.Y_AXIS));
 
-        addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
+        if (currentUser == null || !UserRole.isAdmin(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
+        }
 
         addSectionTitle(menu, "QUẢN LÝ");
 
-        addMenuButton(menu, FontAwesomeSolid.BED, "Quản lý danh mục phòng", false, this::showRoomManagement);
-        if (currentUser != null && "ADMIN".equalsIgnoreCase(currentUser.getNormalizedRole())) {
-            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, this::showAccountManagement);
-        } else if (currentUser != null && "MANAGER".equalsIgnoreCase(currentUser.getNormalizedRole())) {
-            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, () -> JOptionPane.showMessageDialog(this, "Manager không được quản lý user theo yêu cầu phân quyền hiện tại.", "Không đủ quyền", JOptionPane.WARNING_MESSAGE));
-        } else {
-            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, () -> JOptionPane.showMessageDialog(this, "Bạn không có quyền truy cập tính năng này", "Không đủ quyền", JOptionPane.WARNING_MESSAGE));
+        if (currentUser != null && PermissionService.canAccessRoomManagement(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.BED, "Quản lý danh mục phòng", false, this::showRoomManagement);
         }
-        addMenuButton(menu, FontAwesomeSolid.SUITCASE, "Quản lý lưu trú", false, this::showReservationManagement);
-        if (currentUser != null && PermissionService.canRecordIncident(currentUser)) {
+        if (currentUser != null && PermissionService.canManageUsers(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.USER, "Quản lý tài khoản", false, this::showAccountManagement);
+        }
+        if (currentUser != null && PermissionService.canAccessHotelOperations(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.SUITCASE, "Quản lý lưu trú", false, this::showReservationManagement);
+        }
+        if (currentUser != null && PermissionService.canManageIncidents(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.LIST_ALT, "Quản lý sự cố", false, this::showIncidentManagement);
         }
-        if (currentUser != null && PermissionService.canReportMaintenance(currentUser)) {
+        if (currentUser != null && PermissionService.canManageMaintenance(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.WRENCH, "Quản lý bảo trì", false, this::showMaintenanceManagement);
         }
         if (currentUser != null && PermissionService.canViewAuditLogs(currentUser)) {
@@ -228,7 +231,9 @@ public class MainFrame extends JFrame {
         if (currentUser != null && PermissionService.canManageServices(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.COG, "Quản lý dịch vụ", false, this::showServiceManagement);
         }
-        addMenuButton(menu, FontAwesomeSolid.CREDIT_CARD, "Quản lý thanh toán", false, this::showPaymentManagement);
+        if (currentUser != null && PermissionService.canAccessHotelOperations(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.CREDIT_CARD, "Quản lý thanh toán", false, this::showPaymentManagement);
+        }
         if (currentUser != null && PermissionService.canAccessReports(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.CHART_BAR, "Báo cáo, Thống kê", false, this::showReports);
         }
@@ -1740,17 +1745,25 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Quản lý quá trình nhận phòng, lưu trú và trả phòng của khách");
 
         contentPanel.removeAll();
-        contentPanel.add(new StayManagementPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
+        contentPanel.add(new StayManagementPanel(
+                currentUser != null ? currentUser.getUserId() : null,
+                invoiceId -> showPaymentManagement(invoiceId)), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
 
     private void showPaymentManagement() {
+        showPaymentManagement(null);
+    }
+
+    private void showPaymentManagement(Integer invoiceIdToOpen) {
         pageTitle.setText("Quản lý thanh toán");
         pageDescription.setText("Tra cứu, in và quản lý hóa đơn đã phát sinh từ quá trình checkout");
 
         contentPanel.removeAll();
-        contentPanel.add(new PaymentManagerPanel(currentUser != null ? currentUser.getUserId() : null), BorderLayout.CENTER);
+        contentPanel.add(new PaymentManagerPanel(
+                currentUser != null ? currentUser.getUserId() : null,
+                invoiceIdToOpen), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }

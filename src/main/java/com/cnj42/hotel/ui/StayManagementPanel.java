@@ -28,6 +28,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 public class StayManagementPanel extends JPanel {
 
@@ -59,6 +60,7 @@ public class StayManagementPanel extends JPanel {
     private final ServiceService serviceService = new ServiceService();
     private final ServiceUsageService serviceUsageService = new ServiceUsageService();
     private final Integer currentUserId;
+    private final IntConsumer checkoutComplete;
     private DefaultTableModel tableModel;
     private JTable stayTable;
     private final JTextField searchField;
@@ -71,11 +73,16 @@ public class StayManagementPanel extends JPanel {
     private final JLabel checkedOutCount;
 
     public StayManagementPanel() {
-        this(null);
+        this(null, null);
     }
 
     public StayManagementPanel(Integer currentUserId) {
+        this(currentUserId, null);
+    }
+
+    public StayManagementPanel(Integer currentUserId, IntConsumer checkoutComplete) {
         this.currentUserId = currentUserId;
+        this.checkoutComplete = checkoutComplete;
 
         searchField = new JTextField();
         statusFilterCombo = new JComboBox<>(new String[]{
@@ -869,11 +876,14 @@ public class StayManagementPanel extends JPanel {
         confirm.addActionListener(e -> {
             DiscountOption option = (DiscountOption) discountBox.getSelectedItem();
             double discountAmount = summary.getTotalAmount() * (option == null ? 0 : option.percentage) / 100;
-            boolean ok = performCheckout(stayRow, summary, discountAmount, (String) paymentMethod.getSelectedItem());
-            if (ok) {
+            int invoiceId = performCheckout(stayRow, summary, discountAmount, (String) paymentMethod.getSelectedItem());
+            if (invoiceId > 0) {
                 JOptionPane.showMessageDialog(this, "Thanh toán và check-out thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 dialog.dispose();
                 refreshStayData();
+                if (checkoutComplete != null) {
+                    checkoutComplete.accept(invoiceId);
+                }
             } else {
                 JOptionPane.showMessageDialog(this, "Không thể thanh toán hoặc check-out.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
@@ -936,27 +946,99 @@ public class StayManagementPanel extends JPanel {
             return;
         }
 
+        List<Service> services = serviceService.search(null, "ACTIVE");
+        if (services == null || services.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Hiện không có dịch vụ nào đang hoạt động để khách đặt thêm.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Thêm dịch vụ", true);
         dialog.setLayout(new BorderLayout(12, 12));
         dialog.setResizable(false);
 
-        JPanel panel = new JPanel(new GridLayout(0, 2, 10, 10));
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(14, 14, 14, 14));
         panel.setBackground(CARD);
 
-        JLabel serviceLabel = new JLabel("Dịch vụ:");
-        JComboBox<Service> serviceCombo = new JComboBox<>();
-        JLabel quantityLabel = new JLabel("Số lượng:");
-        JTextField quantityField = new JTextField("1");
+        JLabel titleLabel = new JLabel("Dịch vụ khách yêu cầu");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        titleLabel.setForeground(TEXT_DARK);
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(titleLabel);
+        panel.add(Box.createVerticalStrut(10));
 
-        for (Service service : serviceService.search(null, "ACTIVE")) {
-            serviceCombo.addItem(service);
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(CARD);
+
+        List<JCheckBox> checkBoxes = new ArrayList<>();
+        List<JTextField> quantityFields = new ArrayList<>();
+
+        for (Service service : services) {
+            JPanel row = new JPanel(new BorderLayout(12, 8));
+            row.setBackground(CARD);
+            row.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(BORDER, 1),
+                    new EmptyBorder(8, 10, 8, 10)
+            ));
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 54));
+
+            JCheckBox selectedBox = new JCheckBox();
+            selectedBox.setOpaque(false);
+            selectedBox.setFocusPainted(false);
+
+            JPanel infoPanel = new JPanel(new BorderLayout(10, 0));
+            infoPanel.setOpaque(false);
+
+            JLabel nameLabel = new JLabel(service.getServiceName());
+            nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+            nameLabel.setForeground(TEXT_DARK);
+
+            JLabel priceLabel = new JLabel(formatCurrency(service.getPrice()));
+            priceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            priceLabel.setForeground(PRIMARY);
+
+            JPanel textPanel = new JPanel();
+            textPanel.setOpaque(false);
+            textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
+            textPanel.add(nameLabel);
+            textPanel.add(Box.createVerticalStrut(2));
+            textPanel.add(priceLabel);
+            infoPanel.add(textPanel, BorderLayout.CENTER);
+
+            JPanel quantityPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+            quantityPanel.setOpaque(false);
+            JLabel qtyLabel = new JLabel("Số lượng:");
+            qtyLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+            qtyLabel.setForeground(TEXT_MUTED);
+
+            JTextField quantityField = new JTextField("1");
+            quantityField.setColumns(5);
+            quantityField.setHorizontalAlignment(JTextField.CENTER);
+            quantityField.setEnabled(false);
+
+            selectedBox.addActionListener(e -> quantityField.setEnabled(selectedBox.isSelected()));
+
+            quantityPanel.add(qtyLabel);
+            quantityPanel.add(quantityField);
+            infoPanel.add(quantityPanel, BorderLayout.EAST);
+
+            row.add(selectedBox, BorderLayout.WEST);
+            row.add(infoPanel, BorderLayout.CENTER);
+            listPanel.add(row);
+            listPanel.add(Box.createVerticalStrut(8));
+
+            checkBoxes.add(selectedBox);
+            quantityFields.add(quantityField);
         }
 
-        panel.add(serviceLabel);
-        panel.add(serviceCombo);
-        panel.add(quantityLabel);
-        panel.add(quantityField);
+        JScrollPane scrollPane = new JScrollPane(listPanel,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setPreferredSize(new Dimension(520, 260));
+        panel.add(scrollPane);
 
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         footer.setOpaque(false);
@@ -969,31 +1051,58 @@ public class StayManagementPanel extends JPanel {
 
         cancel.addActionListener(e -> dialog.dispose());
         confirm.addActionListener(e -> {
-            Service selected = (Service) serviceCombo.getSelectedItem();
-            if (selected == null) {
-                JOptionPane.showMessageDialog(this, "Vui lòng chọn dịch vụ.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+            boolean hasSelection = false;
+            int successCount = 0;
+            List<String> invalidItems = new ArrayList<>();
 
-            int quantity;
-            try {
-                quantity = Integer.parseInt(quantityField.getText().trim());
-                if (quantity <= 0) {
-                    throw new NumberFormatException();
+            for (int i = 0; i < services.size(); i++) {
+                Service service = services.get(i);
+                JCheckBox checkBox = checkBoxes.get(i);
+                JTextField quantityField = quantityFields.get(i);
+
+                if (!checkBox.isSelected()) {
+                    continue;
                 }
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Số lượng dịch vụ phải là số nguyên dương.", "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
+
+                hasSelection = true;
+
+                int quantity;
+                try {
+                    quantity = Integer.parseInt(quantityField.getText().trim());
+                    if (quantity <= 0) {
+                        throw new NumberFormatException();
+                    }
+                } catch (NumberFormatException ex) {
+                    invalidItems.add(service.getServiceName());
+                    continue;
+                }
+
+                int usageId = serviceUsageService.create(stayRow.getStayId(), service.getServiceId(), quantity, null, currentUserId);
+                if (usageId > 0) {
+                    successCount++;
+                }
+            }
+
+            if (!hasSelection) {
+                JOptionPane.showMessageDialog(this, "Vui lòng tích chọn ít nhất một dịch vụ khách yêu cầu.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            int usageId = serviceUsageService.create(stayRow.getStayId(), selected.getServiceId(), quantity, null, currentUserId);
-            if (usageId > 0) {
-                JOptionPane.showMessageDialog(this, "Thêm dịch vụ thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-                dialog.dispose();
-                refreshStayData();
-            } else {
-                JOptionPane.showMessageDialog(this, "Không thể thêm dịch vụ cho lưu trú này.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            if (!invalidItems.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        "Một số dịch vụ có số lượng không hợp lệ: " + String.join(", ", invalidItems) + ".",
+                        "Lỗi dữ liệu",
+                        JOptionPane.ERROR_MESSAGE);
             }
+
+            if (successCount <= 0) {
+                JOptionPane.showMessageDialog(this, "Không thể thêm dịch vụ cho lưu trú này.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            JOptionPane.showMessageDialog(this, "Thêm dịch vụ thành công.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            dialog.dispose();
+            refreshStayData();
         });
 
         dialog.add(panel, BorderLayout.CENTER);
@@ -1003,9 +1112,9 @@ public class StayManagementPanel extends JPanel {
         dialog.setVisible(true);
     }
 
-    private boolean performCheckout(StayRow stayRow, CheckoutSummary summary, double discountAmount, String paymentMethod) {
+    private int performCheckout(StayRow stayRow, CheckoutSummary summary, double discountAmount, String paymentMethod) {
         if (stayRow == null || stayRow.getStayId() <= 0) {
-            return false;
+            return -1;
         }
 
         final String invoiceCode = "INV" + System.currentTimeMillis();
@@ -1028,7 +1137,7 @@ public class StayManagementPanel extends JPanel {
                 try (ResultSet rs = checkStayPs.executeQuery()) {
                     if (rs.next() && "CHECKED_OUT".equalsIgnoreCase(rs.getString("status"))) {
                         conn.rollback();
-                        return false;
+                        return -1;
                     }
                 }
             }
@@ -1038,7 +1147,7 @@ public class StayManagementPanel extends JPanel {
                 try (ResultSet rs = existingPs.executeQuery()) {
                     if (rs.next() && rs.getInt(1) > 0) {
                         conn.rollback();
-                        return false;
+                        return -1;
                     }
                 }
             }
@@ -1061,7 +1170,7 @@ public class StayManagementPanel extends JPanel {
                 try (ResultSet keys = invoicePs.getGeneratedKeys()) {
                     if (!keys.next()) {
                         conn.rollback();
-                        return false;
+                        return -1;
                     }
                     invoiceId = keys.getInt(1);
                 }
@@ -1126,10 +1235,10 @@ public class StayManagementPanel extends JPanel {
             }
 
             conn.commit();
-            return true;
+            return invoiceId;
         } catch (SQLException ex) {
             System.err.println("Lỗi khi thực hiện checkout: " + ex.getMessage());
-            return false;
+            return -1;
         }
     }
 

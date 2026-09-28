@@ -25,7 +25,7 @@ public final class PermissionService {
     }
 
     public static boolean canAccessReports(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user);
+        return UserRole.isManager(user);
     }
 
     public static boolean canAccessEmployeeOperations(User user) {
@@ -33,31 +33,31 @@ public final class PermissionService {
     }
 
     public static boolean canViewAuditLogs(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user);
+        return UserRole.isAdmin(user);
     }
 
     public static boolean canManageServices(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user);
+        return UserRole.isManager(user);
     }
 
     public static boolean canRecordServiceUsage(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user) || UserRole.isEmployee(user);
+        return UserRole.isManager(user) || UserRole.isEmployee(user);
     }
 
     public static boolean canManageIncidents(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user);
+        return UserRole.isManager(user);
     }
 
     public static boolean canRecordIncident(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user) || UserRole.isEmployee(user);
+        return UserRole.isManager(user) || UserRole.isEmployee(user);
     }
 
     public static boolean canManageMaintenance(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user);
+        return UserRole.isManager(user);
     }
 
     public static boolean canReportMaintenance(User user) {
-        return UserRole.isAdmin(user) || UserRole.isManager(user) || UserRole.isEmployee(user);
+        return UserRole.isManager(user) || UserRole.isEmployee(user);
     }
 
     public static boolean canEditUserRole(User actor, User targetUser) {

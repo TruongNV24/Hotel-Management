@@ -48,7 +48,24 @@ class AuthPermissionTest {
         assertFalse(PermissionService.canCreateManager(manager));
         assertFalse(PermissionService.canCreateManager(employee));
 
+        assertTrue(PermissionService.canViewAuditLogs(admin));
+        assertFalse(PermissionService.canViewAuditLogs(manager));
+        assertFalse(PermissionService.canViewAuditLogs(employee));
+
+        assertFalse(PermissionService.canAccessReports(admin));
+        assertTrue(PermissionService.canAccessReports(manager));
+        assertFalse(PermissionService.canAccessReports(employee));
+
+        assertFalse(PermissionService.canAccessHotelOperations(admin));
         assertTrue(PermissionService.canAccessHotelOperations(manager));
         assertTrue(PermissionService.canAccessHotelOperations(employee));
+
+        assertFalse(PermissionService.canManageServices(admin));
+        assertTrue(PermissionService.canManageServices(manager));
+        assertFalse(PermissionService.canManageServices(employee));
+
+        assertFalse(PermissionService.canManageIncidents(admin));
+        assertTrue(PermissionService.canManageIncidents(manager));
+        assertFalse(PermissionService.canManageIncidents(employee));
     }
 }

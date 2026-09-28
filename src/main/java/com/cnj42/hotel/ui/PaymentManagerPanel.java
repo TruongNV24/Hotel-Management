@@ -12,6 +12,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.cnj42.hotel.utils.DBConnection;
 
@@ -41,6 +43,10 @@ public class PaymentManagerPanel extends JPanel {
     public PaymentManagerPanel() { this(null); }
 
     public PaymentManagerPanel(Integer currentUserId) {
+        this(currentUserId, null);
+    }
+
+    public PaymentManagerPanel(Integer currentUserId, Integer invoiceIdToOpen) {
         this.currentUserId = currentUserId;
         setLayout(new BorderLayout(0, 16));
         setBackground(BACKGROUND);
@@ -97,6 +103,9 @@ public class PaymentManagerPanel extends JPanel {
         add(content, BorderLayout.CENTER);
 
         refreshInvoices();
+        if (invoiceIdToOpen != null && invoiceIdToOpen > 0) {
+            SwingUtilities.invokeLater(() -> showInvoicePreview(invoiceIdToOpen));
+        }
     }
 
     private JPanel buildHeader() {
@@ -545,6 +554,7 @@ public class PaymentManagerPanel extends JPanel {
     }
 
     private void showInvoicePreview(int invoiceId) {
+        List<String[]> serviceLines = new ArrayList<>();
         String sql = "SELECT i.invoice_code, i.room_amount, i.service_amount, i.discount_amount, i.tax_amount, i.total_amount, " +
                      "i.status, i.issued_at, g.full_name AS guest_name, r.room_number " +
                      "FROM invoices i " +
@@ -553,8 +563,23 @@ public class PaymentManagerPanel extends JPanel {
                      "JOIN guests g ON res.guest_id = g.guest_id " +
                      "JOIN rooms r ON s.room_id = r.room_id " +
                      "WHERE i.invoice_id = ?";
-        try (Connection conn = DBConnection.getConnection(); 
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement servicePs = conn.prepareStatement(
+                     "SELECT description, quantity, unit_price, amount FROM invoice_details " +
+                         "WHERE invoice_id = ? AND item_type = 'SERVICE' ORDER BY invoice_detail_id")) {
+            servicePs.setInt(1, invoiceId);
+            try (ResultSet serviceRs = servicePs.executeQuery()) {
+                while (serviceRs.next()) {
+                    serviceLines.add(new String[]{
+                            serviceRs.getString("description"),
+                            String.valueOf(serviceRs.getInt("quantity")),
+                            String.format("%.0f", serviceRs.getDouble("unit_price")),
+                            String.format("%.0f", serviceRs.getDouble("amount"))
+                    });
+                }
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, invoiceId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -586,7 +611,9 @@ public class PaymentManagerPanel extends JPanel {
                     // Items
                     html.append("<table style='width: 100%; font-size: 12px; border-collapse: collapse;'>");
                     html.append("<tr style='border-bottom: 1px solid #ccc;'>");
-                    html.append("<th style='text-align: left; padding: 3px 0;'>Mô tả</th>");
+                    html.append("<th style='text-align: left; padding: 3px 0;'>Dịch vụ / mô tả</th>");
+                    html.append("<th style='text-align: right; padding: 3px 0;'>Số lượng</th>");
+                    html.append("<th style='text-align: right; padding: 3px 0;'>Đơn giá</th>");
                     html.append("<th style='text-align: right; padding: 3px 0; width: 80px;'>Số tiền</th>");
                     html.append("</tr>");
                     
@@ -595,14 +622,25 @@ public class PaymentManagerPanel extends JPanel {
                     
                     html.append("<tr>");
                     html.append("<td style='padding: 3px 0;'>Tiền phòng</td>");
+                    html.append("<td style='text-align: right; padding: 3px 0;'>1</td>");
+                    html.append("<td style='text-align: right; padding: 3px 0;'>-</td>");
                     html.append("<td style='text-align: right; padding: 3px 0;'>").append(String.format("%.0f", roomAmount)).append(" VND</td>");
                     html.append("</tr>");
                     
                     if (serviceAmount > 0) {
-                        html.append("<tr>");
-                        html.append("<td style='padding: 3px 0;'>Tiền dịch vụ</td>");
-                        html.append("<td style='text-align: right; padding: 3px 0;'>").append(String.format("%.0f", serviceAmount)).append(" VND</td>");
-                        html.append("</tr>");
+                        if (serviceLines.isEmpty()) {
+                            html.append("<tr><td colspan='3' style='padding: 3px 0;'>Tổng dịch vụ</td>");
+                            html.append("<td style='text-align: right; padding: 3px 0;'>").append(String.format("%.0f", serviceAmount)).append(" VND</td></tr>");
+                        } else {
+                            for (String[] line : serviceLines) {
+                                html.append("<tr>");
+                                html.append("<td style='padding: 3px 0;'>").append(line[0]).append("</td>");
+                                html.append("<td style='text-align: right; padding: 3px 0;'>").append(line[1]).append("</td>");
+                                html.append("<td style='text-align: right; padding: 3px 0;'>").append(line[2]).append(" VND</td>");
+                                html.append("<td style='text-align: right; padding: 3px 0;'>").append(line[3]).append(" VND</td>");
+                                html.append("</tr>");
+                            }
+                        }
                     }
                     
                     double discountAmount = rs.getDouble("discount_amount");
@@ -674,6 +712,7 @@ public class PaymentManagerPanel extends JPanel {
                     
                     JOptionPane.showMessageDialog(this, scroll, "HÓA ĐƠN - " + rs.getString("invoice_code"), JOptionPane.INFORMATION_MESSAGE);
                 }
+            }
             }
         } catch (SQLException e) {
             System.err.println("Lỗi khi tạo preview: " + e.getMessage());

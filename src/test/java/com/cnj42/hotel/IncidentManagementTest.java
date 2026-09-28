@@ -38,7 +38,7 @@ class IncidentManagementTest {
         User manager = user("MANAGER");
         User employee = user("EMPLOYEE");
 
-        assertTrue(PermissionService.canManageIncidents(admin));
+        assertFalse(PermissionService.canManageIncidents(admin));
         assertTrue(PermissionService.canManageIncidents(manager));
         assertFalse(PermissionService.canManageIncidents(employee));
         assertTrue(PermissionService.canRecordIncident(employee));
