@@ -276,7 +276,7 @@ public class ReportPanel extends JPanel {
                 @Override
                 protected Void doInBackground() {
                     try {
-                        reportService.exportToExcel(currentReport, selectedFile);
+                        reportService.exportToExcel(currentReport, selectedFile, currentUser);
                     } catch (Throwable throwable) {
                         failure = throwable;
                     }

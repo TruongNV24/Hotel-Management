@@ -1,6 +1,7 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.service.AuditLogService;
 
 import javax.swing.*;
 import java.awt.*;
@@ -12,6 +13,7 @@ import java.sql.SQLException;
 public class GuestDialog extends JDialog {
     private boolean saved = false;
     private int createdId = -1;
+    private final AuditLogService auditLogService = new AuditLogService();
 
     private JTextField nameField;
     private JTextField phoneField;
@@ -55,8 +57,13 @@ public class GuestDialog extends JDialog {
             ps.executeUpdate();
             try (ResultSet gk = ps.getGeneratedKeys()) { if (gk.next()) createdId = gk.getInt(1); }
             saved = createdId > 0;
+                auditLogService.logEvent(saved ? "GUEST_CREATED" : "GUEST_CREATE_FAILED", "GUEST", "GUEST",
+                    saved ? createdId : null, null, (saved ? "Created" : "Failed to create") + " guest " + name,
+                    "127.0.0.1", saved ? "SUCCESS" : "FAILED");
             dispose();
         } catch (SQLException e) {
+                auditLogService.logEvent("GUEST_CREATE_FAILED", "GUEST", "GUEST", null, null,
+                    "Exception creating guest " + name + ": " + e.getMessage(), "127.0.0.1", "FAILED");
             JOptionPane.showMessageDialog(this, "Lỗi lưu khách: " + e.getMessage());
         }
     }

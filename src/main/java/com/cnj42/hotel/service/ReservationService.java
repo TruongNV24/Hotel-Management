@@ -494,6 +494,11 @@ public class ReservationService {
     }
 
     public boolean updateReservation(int reservationId, int guestId, int roomId, String checkInDate, String checkOutDate, int numGuests, String note) {
+        return updateReservation(reservationId, guestId, roomId, checkInDate, checkOutDate, numGuests, note, null);
+    }
+
+    public boolean updateReservation(int reservationId, int guestId, int roomId, String checkInDate, String checkOutDate, int numGuests, String note, Integer actingUserId) {
+        User actor = findUserById(actingUserId);
         String fetchOld = "SELECT room_id, status FROM reservations WHERE reservation_id = ?";
         String update = "UPDATE reservations SET guest_id = ?, room_id = ?, check_in_date = ?, check_out_date = ?, number_of_guests = ?, note = ? WHERE reservation_id = ? AND status IN ('PENDING', 'CONFIRMED')";
         Connection conn = null;
@@ -507,12 +512,16 @@ public class ReservationService {
                 try (ResultSet rs = f.executeQuery()) {
                     if (!rs.next()) {
                         conn.rollback();
+                        new AuditLogService().logEvent("RESERVATION_UPDATE_FAILED", "RESERVATION", "RESERVATION", reservationId,
+                                actor, "Reservation not found", "127.0.0.1", "FAILED");
                         return false;
                     }
                     oldRoom = rs.getInt("room_id");
                     String status = rs.getString("status");
                     if (!"PENDING".equals(status) && !"CONFIRMED".equals(status)) {
                         conn.rollback();
+                        new AuditLogService().logEvent("RESERVATION_UPDATE_FAILED", "RESERVATION", "RESERVATION", reservationId,
+                                actor, "Reservation status does not allow update", "127.0.0.1", "FAILED");
                         return false;
                     }
                 }
@@ -520,6 +529,8 @@ public class ReservationService {
 
             if (!isRoomAvailable(roomId, checkInDate, checkOutDate, reservationId)) {
                 conn.rollback();
+                new AuditLogService().logEvent("RESERVATION_UPDATE_FAILED", "RESERVATION", "RESERVATION", reservationId,
+                        actor, "Room unavailable during reservation update", "127.0.0.1", "FAILED");
                 return false;
             }
 
@@ -533,6 +544,8 @@ public class ReservationService {
                 u.setInt(7, reservationId);
                 if (u.executeUpdate() == 0) {
                     conn.rollback();
+                    new AuditLogService().logEvent("RESERVATION_UPDATE_FAILED", "RESERVATION", "RESERVATION", reservationId,
+                            actor, "No reservation row updated", "127.0.0.1", "FAILED");
                     return false;
                 }
             }
@@ -542,6 +555,8 @@ public class ReservationService {
             }
             refreshRoomStatus(conn, roomId, reservationId);
             conn.commit();
+                new AuditLogService().logEvent("RESERVATION_UPDATED", "RESERVATION", "RESERVATION", reservationId,
+                    actor, "Updated reservation " + reservationId, "127.0.0.1", "SUCCESS");
             return true;
         } catch (SQLException e) {
             if (conn != null) {
@@ -551,6 +566,8 @@ public class ReservationService {
                 }
             }
             System.err.println("Lỗi khi cập nhật reservation: " + e.getMessage());
+                new AuditLogService().logEvent("RESERVATION_UPDATE_FAILED", "RESERVATION", "RESERVATION", reservationId,
+                    actor, "Exception updating reservation: " + e.getMessage(), "127.0.0.1", "FAILED");
             return false;
         }
     }

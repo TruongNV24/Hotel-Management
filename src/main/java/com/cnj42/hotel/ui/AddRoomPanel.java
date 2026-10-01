@@ -2,6 +2,7 @@ package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.Room;
 import com.cnj42.hotel.model.RoomType;
+import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.RoomService;
 
 import javax.swing.*;
@@ -58,6 +59,7 @@ public class AddRoomPanel extends JPanel {
     private final RoomService roomService;
     private final Room editingRoom;
     private final Runnable onSaved;
+    private final User currentUser;
 
     // Form fields
     private JTextField roomNumberField;
@@ -80,13 +82,18 @@ public class AddRoomPanel extends JPanel {
     private JTextField otherAmenityField;
 
     public AddRoomPanel() {
-        this(null, null);
+        this(null, null, null);
     }
 
     public AddRoomPanel(Room room, Runnable onSaved) {
+        this(room, onSaved, null);
+    }
+
+    public AddRoomPanel(Room room, Runnable onSaved, User currentUser) {
         this.roomService = new RoomService();
         this.editingRoom = room;
         this.onSaved = onSaved;
+        this.currentUser = currentUser;
         initUI();
         if (editingRoom != null) populateForm(editingRoom);
     }
@@ -613,7 +620,9 @@ public class AddRoomPanel extends JPanel {
             return;
         }
 
-        boolean saved = editingRoom == null ? roomService.createRoom(room) : roomService.updateRoom(room);
+        boolean saved = editingRoom == null
+            ? roomService.createRoom(room, currentUser)
+            : roomService.updateRoom(room, currentUser);
         if (saved) {
             if (!selectedImages.isEmpty()) {
                 ROOM_IMAGES.put(roomNumber, selectedImages.get(0));

@@ -2,6 +2,7 @@ package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.Room;
 import com.cnj42.hotel.model.RoomType;
+import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.RoomService;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -41,6 +42,7 @@ public class RoomManagerPanel extends JPanel {
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0");
 
     private final RoomService roomService = new RoomService();
+    private final User currentUser;
     private final Runnable addRoomAction;
     private final java.util.function.Consumer<Room> editRoomAction;
     private final JTextField searchField = new JTextField();
@@ -61,14 +63,19 @@ public class RoomManagerPanel extends JPanel {
     private final JLabel maintenanceSub = new JLabel("0.0% tổng số phòng");
 
     public RoomManagerPanel() {
-        this(() -> { }, room -> { });
+        this(null, () -> { }, room -> { });
     }
 
     public RoomManagerPanel(Runnable addRoomAction) {
-        this(addRoomAction, room -> { });
+        this(null, addRoomAction, room -> { });
     }
 
     public RoomManagerPanel(Runnable addRoomAction, java.util.function.Consumer<Room> editRoomAction) {
+        this(null, addRoomAction, editRoomAction);
+    }
+
+    public RoomManagerPanel(User currentUser, Runnable addRoomAction, java.util.function.Consumer<Room> editRoomAction) {
+        this.currentUser = currentUser;
         this.addRoomAction = addRoomAction;
         this.editRoomAction = editRoomAction;
         setLayout(new BorderLayout(0, 20));
@@ -361,7 +368,7 @@ public class RoomManagerPanel extends JPanel {
         int result = JOptionPane.showConfirmDialog(this,
                 "Bạn có chắc muốn xóa phòng " + room.getRoomNumber() + "?",
                 "Xác nhận xóa", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        if (result == JOptionPane.YES_OPTION && roomService.deleteRoom(room.getRoomId())) {
+        if (result == JOptionPane.YES_OPTION && roomService.deleteRoom(room.getRoomId(), currentUser)) {
             refreshRooms();
         } else if (result == JOptionPane.YES_OPTION) {
             JOptionPane.showMessageDialog(this, "Không thể xóa phòng. Phòng có thể đang được sử dụng.",

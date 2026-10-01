@@ -21,6 +21,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 public class ReportService {
 
     private final ReportDAO reportDAO = new ReportDAO();
+    private final AuditLogService auditLogService = new AuditLogService();
 
     public ReportData getReportData(int year, Integer month) {
         return getReportData(year, month, null);
@@ -30,18 +31,31 @@ public class ReportService {
         if (actor == null || !PermissionService.canAccessReports(actor)) {
             ReportData denied = new ReportData();
             denied.setErrorMessage("Bạn không có quyền xem báo cáo.");
+            auditLogService.logEvent("REPORT_ACCESS_DENIED", "REPORT", "REPORT", null, actor,
+                    "Report access denied for " + year + (month == null ? "" : "-" + month),
+                    "127.0.0.1", "FAILED");
             return denied;
         }
         try {
-            return reportDAO.getReportData(year, month);
+            ReportData report = reportDAO.getReportData(year, month);
+            auditLogService.logEvent("REPORT_VIEWED", "REPORT", "REPORT", null, actor,
+                    "Viewed report for " + year + (month == null ? "" : "-" + month),
+                    "127.0.0.1", "SUCCESS");
+            return report;
         } catch (SQLException exception) {
             ReportData report = new ReportData();
             report.setErrorMessage(exception.getMessage());
+            auditLogService.logEvent("REPORT_VIEW_FAILED", "REPORT", "REPORT", null, actor,
+                    "Failed to load report: " + exception.getMessage(), "127.0.0.1", "FAILED");
             return report;
         }
     }
 
     public void exportToExcel(ReportData report, File file) throws Exception {
+        exportToExcel(report, file, null);
+    }
+
+    public void exportToExcel(ReportData report, File file, User actor) throws Exception {
         try (Workbook workbook = new XSSFWorkbook(); FileOutputStream output = new FileOutputStream(file)) {
             writeSummarySheet(workbook, report);
             if (report.getMonth() == null) {
@@ -67,6 +81,8 @@ public class ReportService {
                 }
             }
             workbook.write(output);
+            auditLogService.logEvent("REPORT_EXPORTED", "REPORT", "REPORT", null, actor,
+                    "Exported report to " + file.getName(), "127.0.0.1", "SUCCESS");
         }
     }
 

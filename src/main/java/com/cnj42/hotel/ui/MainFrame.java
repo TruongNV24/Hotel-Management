@@ -4,6 +4,7 @@ import com.cnj42.hotel.model.DashboardData;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.model.UserRole;
 import com.cnj42.hotel.service.DashboardService;
+import com.cnj42.hotel.service.AuditLogService;
 import com.cnj42.hotel.service.PermissionService;
 import com.cnj42.hotel.service.RoomService;
 import com.cnj42.hotel.utils.DBConnection;
@@ -62,6 +63,7 @@ public class MainFrame extends JFrame {
 
     private final User currentUser;
     private final DashboardService dashboardService;
+    private final AuditLogService auditLogService;
 
     // =========================================================
     // UI
@@ -100,6 +102,7 @@ public class MainFrame extends JFrame {
 
         this.currentUser = user;
         this.dashboardService = new DashboardService();
+        this.auditLogService = new AuditLogService();
 
         setTitle("Hotel Management System");
         setSize(1440, 900);
@@ -1715,7 +1718,7 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Danh sách và quản lý thông tin phòng");
 
         contentPanel.removeAll();
-        contentPanel.add(new RoomManagerPanel(this::showAddRoom, this::showEditRoom), BorderLayout.CENTER);
+        contentPanel.add(new RoomManagerPanel(currentUser, this::showAddRoom, this::showEditRoom), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -1725,7 +1728,7 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Tạo mới thông tin phòng");
 
         contentPanel.removeAll();
-        contentPanel.add(new AddRoomPanel(null, this::showRoomManagement), BorderLayout.CENTER);
+        contentPanel.add(new AddRoomPanel(null, this::showRoomManagement, currentUser), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -1841,7 +1844,7 @@ public class MainFrame extends JFrame {
         pageDescription.setText("Cập nhật thông tin phòng");
 
         contentPanel.removeAll();
-        contentPanel.add(new AddRoomPanel(room, this::showRoomManagement), BorderLayout.CENTER);
+        contentPanel.add(new AddRoomPanel(room, this::showRoomManagement, currentUser), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }
@@ -1851,6 +1854,9 @@ public class MainFrame extends JFrame {
     // =========================================================
 
     private void openModule(String module) {
+
+        auditLogService.logEvent("MODULE_OPENED", "SYSTEM", "MODULE", null, currentUser,
+            "Opened module: " + module, "127.0.0.1", "SUCCESS");
 
         JOptionPane.showMessageDialog(
                 this,
@@ -1874,6 +1880,9 @@ public class MainFrame extends JFrame {
         );
 
         if (result == JOptionPane.YES_OPTION) {
+            auditLogService.logEvent("LOGOUT_SUCCESS", "AUTH", "USER",
+                    currentUser == null ? null : currentUser.getUserId(), currentUser,
+                    "User logged out", "127.0.0.1", "SUCCESS");
             dispose();
             SwingUtilities.invokeLater(() -> new LoginFrame().setVisible(true));
         }

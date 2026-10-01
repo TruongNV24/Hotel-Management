@@ -142,7 +142,7 @@ public class ReservationDialog extends JDialog {
                 int id = reservationService.createReservation(guest.id, room.id, in, out, num, note, createdBy);
                 if (id > 0) { saved=true; dispose(); return; }
             } else {
-                boolean ok = reservationService.updateReservation(reservationId, guest.id, room.id, in, out, num, note);
+                boolean ok = reservationService.updateReservation(reservationId, guest.id, room.id, in, out, num, note, createdBy);
                 if (ok) { saved=true; dispose(); return; }
             }
             JOptionPane.showMessageDialog(this, "Lỗi khi lưu. Kiểm tra dữ liệu.", "Lỗi", JOptionPane.ERROR_MESSAGE);
