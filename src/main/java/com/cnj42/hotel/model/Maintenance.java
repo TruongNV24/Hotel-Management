@@ -7,6 +7,7 @@ public class Maintenance {
     public static final String CORRECTIVE = "CORRECTIVE";
     public static final String EMERGENCY = "EMERGENCY";
     public static final String INSPECTION = "INSPECTION";
+    public static final String CLEANING = "CLEANING";
     public static final String OTHER = "OTHER";
 
     public static final String OPEN = "OPEN";

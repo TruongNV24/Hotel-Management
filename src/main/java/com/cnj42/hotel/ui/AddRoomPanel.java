@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +43,11 @@ public class AddRoomPanel extends JPanel {
     // ---- Palette (kept consistent with RoomManagementPanel) ----
     private static final Color PRIMARY = new Color(24, 119, 135);
     private static final Color PRIMARY_LIGHT = new Color(231, 245, 246);
-    private static final Color BACKGROUND = new Color(246, 247, 251);
+    private static final Color BACKGROUND = new Color(244, 248, 248);
     private static final Color TEXT_DARK = new Color(35, 40, 52);
     private static final Color TEXT_GRAY = new Color(120, 125, 140);
     private static final Color TEXT_PLACEHOLDER = new Color(160, 164, 178);
-    private static final Color BORDER_GRAY = new Color(222, 225, 233);
+    private static final Color BORDER_GRAY = new Color(225, 233, 235);
     private static final Color WHITE = Color.WHITE;
     private static final Color RED = new Color(235, 75, 75);
     private static final Color GREEN = new Color(35, 181, 118);
@@ -55,6 +56,7 @@ public class AddRoomPanel extends JPanel {
     private static final Font FONT_LABEL = new Font("Segoe UI", Font.BOLD, 12);
     private static final Font FONT_SECTION = new Font("Segoe UI", Font.BOLD, 15);
     private static final Font FONT_TITLE = new Font("Segoe UI", Font.BOLD, 20);
+    private static final DecimalFormat MONEY = new DecimalFormat("#,##0");
 
     private final RoomService roomService;
     private final Room editingRoom;
@@ -140,7 +142,7 @@ public class AddRoomPanel extends JPanel {
         title.setFont(FONT_TITLE);
         title.setForeground(TEXT_DARK);
 
-        JLabel breadcrumb = new JLabel("Dashboard  >  Quản lý phòng  >  Thêm phòng");
+        JLabel breadcrumb = new JLabel("Quản lý phòng  /  " + (editingRoom == null ? "Thêm phòng mới" : "Cập nhật thông tin phòng"));
         breadcrumb.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         breadcrumb.setForeground(TEXT_GRAY);
         breadcrumb.setBorder(new EmptyBorder(4, 0, 0, 0));
@@ -200,7 +202,12 @@ public class AddRoomPanel extends JPanel {
         floorCombo = new JComboBox<>();
         for (int i = 1; i <= 20; i++) floorCombo.addItem(i);
         floorCombo.setSelectedItem(null);
-        priceField = placeholderField("Ví dụ: 500000");
+        priceField = placeholderField("Chọn loại phòng để xem giá");
+        priceField.setEditable(false);
+        priceField.setFocusable(false);
+        priceField.setBackground(new Color(239, 246, 247));
+        priceField.setForeground(TEXT_DARK);
+        roomTypeCombo.addActionListener(e -> updateTypeDependentFields());
         card.add(fieldRow(
                 labeledField("Tầng", true, styled(floorCombo)),
                 labeledField("Giá / đêm (VNĐ)", true, priceField)
@@ -278,6 +285,20 @@ public class AddRoomPanel extends JPanel {
         for (RoomType type : types) {
             roomTypeCombo.addItem(type);
         }
+    }
+
+    private void updateTypeDependentFields() {
+        RoomType type = (RoomType) roomTypeCombo.getSelectedItem();
+        if (type == null) {
+            priceField.setText("Chọn loại phòng để xem giá");
+            priceField.setForeground(TEXT_PLACEHOLDER);
+            capacityCombo.setSelectedItem(null);
+            return;
+        }
+
+        priceField.setText(MONEY.format(type.getPricePerNight()) + " VNĐ / đêm");
+        priceField.setForeground(TEXT_DARK);
+        capacityCombo.setSelectedItem(type.getCapacity());
     }
 
     // ==================== CARD: HÌNH ẢNH PHÒNG ====================
@@ -573,8 +594,8 @@ public class AddRoomPanel extends JPanel {
     private void resetForm() {
         roomNumberField.setText("");
         addPlaceholder(roomNumberField, "Ví dụ: 101");
-        priceField.setText("");
-        addPlaceholder(priceField, "Ví dụ: 500000");
+        priceField.setText("Chọn loại phòng để xem giá");
+        priceField.setForeground(TEXT_PLACEHOLDER);
         roomTypeCombo.setSelectedItem(null);
         floorCombo.setSelectedItem(null);
         capacityCombo.setSelectedItem(null);
@@ -594,11 +615,10 @@ public class AddRoomPanel extends JPanel {
         String roomNumber = getRealText(roomNumberField, "Ví dụ: 101");
         RoomType type = (RoomType) roomTypeCombo.getSelectedItem();
         Integer floor = (Integer) floorCombo.getSelectedItem();
-        String price = getRealText(priceField, "Ví dụ: 500000");
         Integer capacity = (Integer) capacityCombo.getSelectedItem();
         String status = (String) statusCombo.getSelectedItem();
 
-        if (roomNumber.isEmpty() || type == null || floor == null || price.isEmpty() || capacity == null) {
+        if (roomNumber.isEmpty() || type == null || floor == null || capacity == null) {
             JOptionPane.showMessageDialog(this, "Vui lòng điền đầy đủ các trường bắt buộc (*).",
                     "Thiếu thông tin", JOptionPane.WARNING_MESSAGE);
             return;
@@ -663,8 +683,7 @@ public class AddRoomPanel extends JPanel {
             RoomType type = roomTypeCombo.getItemAt(i);
             if (type.getRoomTypeId() == room.getRoomTypeId()) {
                 roomTypeCombo.setSelectedIndex(i);
-                priceField.setText(String.valueOf((long) type.getPricePerNight()));
-                capacityCombo.setSelectedItem(type.getCapacity());
+                updateTypeDependentFields();
                 break;
             }
         }
@@ -747,7 +766,7 @@ public class AddRoomPanel extends JPanel {
         panel.setBackground(WHITE);
         panel.setBorder(new CompoundBorder(
                 new LineBorder(BORDER_GRAY, 1, true),
-                new EmptyBorder(20, 20, 20, 20)
+                new EmptyBorder(16, 18, 16, 18)
         ));
         return panel;
     }

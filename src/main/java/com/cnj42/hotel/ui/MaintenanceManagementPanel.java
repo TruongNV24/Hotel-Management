@@ -4,11 +4,16 @@ import com.cnj42.hotel.model.Maintenance;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.MaintenanceService;
 import com.cnj42.hotel.service.PermissionService;
+import com.cnj42.hotel.utils.DBConnection;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -17,49 +22,100 @@ import java.util.List;
 public class MaintenanceManagementPanel extends JPanel {
     private static final Color BACKGROUND = new Color(246, 247, 251);
     private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_MUTED = new Color(105, 127, 132);
+    private static final Color BORDER = new Color(225, 233, 235);
+    private static final Color RED = new Color(214, 82, 88);
+    private static final Color ORANGE = new Color(224, 142, 57);
+    private static final Color GREEN = new Color(45, 160, 108);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final User currentUser;
     private final MaintenanceService maintenanceService = new MaintenanceService();
     private final JTextField roomFilter = new JTextField(5);
     private final JTextField searchField = new JTextField(15);
-    private final JComboBox<String> typeFilter = new JComboBox<>(new String[]{"ALL", Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.OTHER});
+    private final JComboBox<String> typeFilter = new JComboBox<>(new String[]{"ALL", Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.CLEANING, Maintenance.OTHER});
     private final JComboBox<String> priorityFilter = new JComboBox<>(new String[]{"ALL", Maintenance.LOW, Maintenance.MEDIUM, Maintenance.HIGH, Maintenance.CRITICAL});
     private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{"ALL", Maintenance.OPEN, Maintenance.IN_PROGRESS, Maintenance.COMPLETED, Maintenance.CANCELLED});
     private final DefaultTableModel tableModel;
     private final JTable table;
+    private final JLabel totalCount = new JLabel("0");
+    private final JLabel openCount = new JLabel("0");
+    private final JLabel progressCount = new JLabel("0");
+    private final JLabel completedCount = new JLabel("0");
 
     public MaintenanceManagementPanel(User currentUser) {
         this.currentUser = currentUser;
-        setLayout(new BorderLayout(10, 10));
+        setLayout(new BorderLayout(0, 16));
         setBackground(BACKGROUND);
-        setBorder(new EmptyBorder(18, 18, 18, 18));
+        setBorder(new EmptyBorder(8, 14, 18, 14));
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        toolbar.setOpaque(false);
-        toolbar.add(new JLabel("Room:")); toolbar.add(roomFilter);
-        toolbar.add(new JLabel("Loại:")); toolbar.add(typeFilter);
-        toolbar.add(new JLabel("Ưu tiên:")); toolbar.add(priorityFilter);
-        toolbar.add(new JLabel("Trạng thái:")); toolbar.add(statusFilter);
-        toolbar.add(new JLabel("Tìm:")); toolbar.add(searchField);
+        JPanel top = new JPanel(new BorderLayout(0, 14));
+        top.setOpaque(false);
+        top.add(buildStatsPanel(), BorderLayout.NORTH);
+
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
+        toolbar.setBackground(Color.WHITE);
+        toolbar.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER, 1, true),
+            new EmptyBorder(10, 12, 10, 12)
+        ));
+
+        JPanel filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filterRow.setOpaque(false);
+        addFilterLabel(filterRow, "Phòng"); filterRow.add(roomFilter);
+        addFilterLabel(filterRow, "Loại bảo trì"); filterRow.add(typeFilter);
+        addFilterLabel(filterRow, "Ưu tiên"); filterRow.add(priorityFilter);
+        addFilterLabel(filterRow, "Trạng thái"); filterRow.add(statusFilter);
+        addFilterLabel(filterRow, "Tìm kiếm"); filterRow.add(searchField);
         JButton searchButton = new JButton("Tìm kiếm");
         JButton resetButton = new JButton("Đặt lại");
+        styleButton(searchButton, PRIMARY, Color.WHITE);
+        styleButton(resetButton, new Color(239, 246, 247), PRIMARY);
+        filterRow.add(searchButton); filterRow.add(resetButton);
+
+        JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 10));
+        actionRow.setOpaque(false);
         JButton addButton = new JButton("Tạo bảo trì");
         JButton editButton = new JButton("Cập nhật");
         JButton assignButton = new JButton("Phân công");
         JButton startButton = new JButton("Bắt đầu");
         JButton completeButton = new JButton("Hoàn thành");
         JButton cancelButton = new JButton("Hủy");
-        toolbar.add(searchButton); toolbar.add(resetButton); toolbar.add(addButton); toolbar.add(editButton);
-        toolbar.add(assignButton); toolbar.add(startButton); toolbar.add(completeButton); toolbar.add(cancelButton);
-        add(toolbar, BorderLayout.NORTH);
+        styleButton(addButton, PRIMARY, Color.WHITE);
+        styleButton(editButton, new Color(239, 246, 247), PRIMARY);
+        styleButton(assignButton, new Color(239, 246, 247), PRIMARY);
+        styleButton(startButton, new Color(232, 246, 239), GREEN);
+        styleButton(completeButton, new Color(232, 246, 239), GREEN);
+        styleButton(cancelButton, new Color(255, 235, 236), RED);
+        actionRow.add(addButton); actionRow.add(editButton); actionRow.add(assignButton);
+        actionRow.add(startButton); actionRow.add(completeButton); actionRow.add(cancelButton);
+        toolbar.add(filterRow);
+        toolbar.add(actionRow);
+        top.add(toolbar, BorderLayout.SOUTH);
+        add(top, BorderLayout.NORTH);
 
         tableModel = new DefaultTableModel(new Object[]{"ID", "Room", "Loại", "Tiêu đề", "Ưu tiên", "Trạng thái", "Bắt đầu", "Dự kiến", "Hoàn thành", "Duration", "Người xử lý"}, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
         table = new JTable(tableModel);
-        table.setRowHeight(30);
+        table.setRowHeight(38);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.setForeground(TEXT_DARK);
+        table.setBackground(Color.WHITE);
+        table.setSelectionBackground(new Color(225, 243, 245));
+        table.setSelectionForeground(TEXT_DARK);
+        table.setGridColor(new Color(239, 243, 244));
+        table.setShowVerticalLines(false);
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
+        table.getTableHeader().setForeground(TEXT_MUTED);
+        table.getTableHeader().setBackground(new Color(247, 250, 250));
+        table.getTableHeader().setPreferredSize(new Dimension(0, 38));
         table.setAutoCreateRowSorter(true);
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        JScrollPane tableScroll = new JScrollPane(table);
+        tableScroll.setBorder(BorderFactory.createLineBorder(BORDER, 1, true));
+        tableScroll.getViewport().setBackground(Color.WHITE);
+        add(tableScroll, BorderLayout.CENTER);
 
         searchButton.addActionListener(e -> loadMaintenances());
         resetButton.addActionListener(e -> { roomFilter.setText(""); searchField.setText(""); typeFilter.setSelectedItem("ALL"); priorityFilter.setSelectedItem("ALL"); statusFilter.setSelectedItem("ALL"); loadMaintenances(); });
@@ -79,12 +135,78 @@ public class MaintenanceManagementPanel extends JPanel {
         Integer roomId = parseId(roomFilter.getText());
         List<Maintenance> records = maintenanceService.search(roomId, selected(typeFilter), selected(priorityFilter), selected(statusFilter), searchField.getText());
         LocalDateTime now = LocalDateTime.now();
+        int open = 0;
+        int inProgress = 0;
+        int completed = 0;
         for (Maintenance record : records) {
             String status = record.isOverdue(now) ? "OVERDUE" : record.getStatus();
+            if (Maintenance.OPEN.equals(record.getStatus())) open++;
+            if (Maintenance.IN_PROGRESS.equals(record.getStatus())) inProgress++;
+            if (Maintenance.COMPLETED.equals(record.getStatus())) completed++;
             tableModel.addRow(new Object[]{record.getMaintenanceId(), record.getRoomNumber(), record.getMaintenanceType(), record.getTitle(), record.getPriority(), status,
                     display(record.getStartedAt()), display(record.getExpectedEndAt()), display(record.getCompletedAt()), formatDuration(record.getDurationMinutes()),
                     record.getAssignedToName() == null ? "-" : record.getAssignedToName()});
         }
+        totalCount.setText(String.valueOf(records.size()));
+        openCount.setText(String.valueOf(open));
+        progressCount.setText(String.valueOf(inProgress));
+        completedCount.setText(String.valueOf(completed));
+    }
+
+    private JPanel buildStatsPanel() {
+        JPanel stats = new JPanel(new GridLayout(1, 4, 12, 0));
+        stats.setOpaque(false);
+        stats.add(createMetricCard("TOÀN BỘ BẢO TRÌ", totalCount, "Theo bộ lọc hiện tại", PRIMARY));
+        stats.add(createMetricCard("ĐANG MỞ", openCount, "Chờ xử lý", RED));
+        stats.add(createMetricCard("ĐANG XỬ LÝ", progressCount, "Đã bắt đầu", ORANGE));
+        stats.add(createMetricCard("ĐÃ HOÀN THÀNH", completedCount, "Đã xử lý xong", GREEN));
+        return stats;
+    }
+
+    private JPanel createMetricCard(String title, JLabel value, String helper, Color accent) {
+        JPanel card = new JPanel(new BorderLayout(12, 0));
+        card.setBackground(Color.WHITE);
+        card.setBorder(new EmptyBorder(14, 16, 14, 16));
+        JPanel marker = new JPanel();
+        marker.setBackground(accent);
+        marker.setPreferredSize(new Dimension(5, 46));
+        card.add(marker, BorderLayout.WEST);
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        titleLabel.setForeground(TEXT_MUTED);
+        value.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        value.setForeground(accent);
+        JLabel helperLabel = new JLabel(helper);
+        helperLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        helperLabel.setForeground(TEXT_MUTED);
+        text.add(titleLabel);
+        text.add(Box.createVerticalStrut(2));
+        text.add(value);
+        text.add(helperLabel);
+        card.add(text, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void addFilterLabel(JPanel parent, String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        label.setForeground(TEXT_MUTED);
+        parent.add(label);
+    }
+
+    private void styleButton(JButton button, Color background, Color foreground) {
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(8, 13, 8, 13));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
     private void updateButtonState(JButton edit, JButton assign, JButton start, JButton complete, JButton cancel) {
@@ -110,7 +232,7 @@ public class MaintenanceManagementPanel extends JPanel {
     private void openEditor(Maintenance existing) {
         JTextField roomField = new JTextField(existing == null ? "" : String.valueOf(existing.getRoomId()));
         JTextField titleField = new JTextField(existing == null ? "" : existing.getTitle());
-        JComboBox<String> typeBox = new JComboBox<>(new String[]{Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.OTHER});
+        JComboBox<String> typeBox = new JComboBox<>(new String[]{Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.CLEANING, Maintenance.OTHER});
         JComboBox<String> priorityBox = new JComboBox<>(new String[]{Maintenance.LOW, Maintenance.MEDIUM, Maintenance.HIGH, Maintenance.CRITICAL});
         JTextField expectedField = new JTextField(existing == null ? "" : display(existing.getExpectedEndAt()));
         JTextArea descriptionArea = new JTextArea(existing == null ? "" : empty(existing.getDescription()), 3, 26);
@@ -140,9 +262,17 @@ public class MaintenanceManagementPanel extends JPanel {
 
     private void assignSelected() {
         Maintenance record = selectedMaintenance(); if (record == null) return;
-        String value = JOptionPane.showInputDialog(this, "Nhập User ID thực hiện (để trống để bỏ phân công):", record.getAssignedTo() == null ? "" : String.valueOf(record.getAssignedTo()));
-        if (value == null) return;
-        if (!maintenanceService.assign(record.getMaintenanceId(), parseId(value), currentUser)) JOptionPane.showMessageDialog(this, "Không thể phân công user.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+        JComboBox<ReferenceOption> assigneeBox = createReferenceBox(
+            "SELECT user_id, CONCAT(full_name, ' (', username, ')') FROM users "
+                + "WHERE status = 'ACTIVE' ORDER BY full_name");
+        selectReference(assigneeBox, record.getAssignedTo());
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.add(new JLabel("Nhân viên thực hiện:"), BorderLayout.NORTH);
+        panel.add(assigneeBox, BorderLayout.CENTER);
+        int result = JOptionPane.showConfirmDialog(this, panel, "Phân công bảo trì",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+        if (!maintenanceService.assign(record.getMaintenanceId(), selectedReferenceId(assigneeBox), currentUser)) JOptionPane.showMessageDialog(this, "Không thể phân công user.", "Lỗi", JOptionPane.ERROR_MESSAGE);
         loadMaintenances();
     }
 
@@ -174,4 +304,50 @@ public class MaintenanceManagementPanel extends JPanel {
     private String display(LocalDateTime value) { return value == null ? "-" : FORMATTER.format(value); }
     private String empty(String value) { return value == null ? "" : value; }
     private String formatDuration(Integer minutes) { if (minutes == null) return "-"; return (minutes / 60) + "h " + (minutes % 60) + "m"; }
+
+    private JComboBox<ReferenceOption> createReferenceBox(String sql) {
+        JComboBox<ReferenceOption> box = new JComboBox<>();
+        box.addItem(new ReferenceOption(null, "Không liên kết"));
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                box.addItem(new ReferenceOption(resultSet.getInt(1), resultSet.getString(2)));
+            }
+        } catch (SQLException exception) {
+            System.err.println("Không thể tải danh sách nhân viên: " + exception.getMessage());
+        }
+        box.setPreferredSize(new Dimension(280, 28));
+        return box;
+    }
+
+    private void selectReference(JComboBox<ReferenceOption> box, Integer id) {
+        for (int index = 0; index < box.getItemCount(); index++) {
+            ReferenceOption option = box.getItemAt(index);
+            if (id == null ? option.id == null : id.equals(option.id)) {
+                box.setSelectedIndex(index);
+                return;
+            }
+        }
+    }
+
+    private Integer selectedReferenceId(JComboBox<ReferenceOption> box) {
+        ReferenceOption option = (ReferenceOption) box.getSelectedItem();
+        return option == null ? null : option.id;
+    }
+
+    private static class ReferenceOption {
+        private final Integer id;
+        private final String label;
+
+        private ReferenceOption(Integer id, String label) {
+            this.id = id;
+            this.label = label == null ? "" : label;
+        }
+
+        @Override
+        public String toString() {
+            return id == null ? label : id + " - " + label;
+        }
+    }
 }

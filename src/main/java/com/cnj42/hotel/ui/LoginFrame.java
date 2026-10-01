@@ -212,26 +212,30 @@ public class LoginFrame extends JFrame {
                 return;
             }
 
-            dispose();
-
             MainFrame mainFrame = new MainFrame(user);
             mainFrame.setVisible(true);
+                        dispose();
 
                 } catch (SQLException e) {
                         System.err.println("Database connection failed during login.");
                         e.printStackTrace();
-                        JOptionPane.showMessageDialog(
-                                        this,
-                                        "Database connection failed:\n" + e.getMessage(),
-                                        "Database error",
-                                        JOptionPane.ERROR_MESSAGE
-                        );
+                        showLoginFailure("Database connection failed:\n" + e.getMessage());
+                } catch (Throwable e) {
+                        System.err.println("Application failed to start after login.");
+                        e.printStackTrace();
+                        showLoginFailure("Không thể mở giao diện chính:\n" + e.getClass().getSimpleName()
+                                        + (e.getMessage() == null ? "" : "\n" + e.getMessage()));
 
         } finally {
 
             loginButton.setEnabled(true);
         }
     }
+
+        private void showLoginFailure(String message) {
+                JOptionPane.showMessageDialog(this, message, "Lỗi khởi động", JOptionPane.ERROR_MESSAGE);
+                setVisible(true);
+        }
 
         private void showStatus(String message, Color color) {
                 statusLabel.setText(message);

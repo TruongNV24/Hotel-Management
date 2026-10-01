@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 public class MaintenanceService {
-    private static final Set<String> TYPES = Set.of(Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.OTHER);
+    private static final Set<String> TYPES = Set.of(Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.CLEANING, Maintenance.OTHER);
     private static final Set<String> PRIORITIES = Set.of(Maintenance.LOW, Maintenance.MEDIUM, Maintenance.HIGH, Maintenance.CRITICAL);
     private final MaintenanceDAO maintenanceDAO = new MaintenanceDAO();
     private final AuditLogService auditLogService = new AuditLogService();

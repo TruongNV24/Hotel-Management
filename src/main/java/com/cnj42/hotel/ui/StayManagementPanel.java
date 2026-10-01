@@ -34,11 +34,11 @@ public class StayManagementPanel extends JPanel {
 
     private static final Color PRIMARY = new Color(24, 119, 135);
     private static final Color PRIMARY_LIGHT = new Color(231, 245, 246);
-    private static final Color BACKGROUND = new Color(246, 247, 251);
+    private static final Color BACKGROUND = new Color(244, 248, 248);
     private static final Color CARD = new Color(255, 255, 255);
-    private static final Color BORDER = new Color(230, 234, 241);
-    private static final Color TEXT_DARK = new Color(35, 40, 52);
-    private static final Color TEXT_MUTED = new Color(120, 125, 140);
+    private static final Color BORDER = new Color(225, 233, 235);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_MUTED = new Color(105, 127, 132);
 
     private static final Color GREEN = new Color(58, 176, 116);
     private static final Color GREEN_BG = new Color(224, 244, 234);
@@ -101,7 +101,7 @@ public class StayManagementPanel extends JPanel {
 
         setLayout(new BorderLayout(0, 18));
         setBackground(BACKGROUND);
-        setBorder(new EmptyBorder(14, 16, 18, 16));
+        setBorder(new EmptyBorder(8, 14, 18, 14));
 
         JPanel contentCard = new JPanel(new BorderLayout(0, 14));
         contentCard.setOpaque(false);
@@ -220,7 +220,7 @@ public class StayManagementPanel extends JPanel {
                 new EmptyBorder(14, 14, 14, 14)
         ));
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         toolbar.setOpaque(false);
 
         searchField.setPreferredSize(new Dimension(260, 36));
@@ -265,8 +265,7 @@ public class StayManagementPanel extends JPanel {
         toDateField.putClientProperty("JTextField.placeholderText", "dd/MM/yyyy");
 
         JButton createGuestButton = new JButton("+ Khách mới");
-        createGuestButton.setBackground(PRIMARY);
-        createGuestButton.setForeground(Color.blue);
+        styleToolbarButton(createGuestButton, PRIMARY, Color.WHITE);
         createGuestButton.setFocusPainted(false);
         createGuestButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         createGuestButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -274,8 +273,7 @@ public class StayManagementPanel extends JPanel {
         createGuestButton.addActionListener(e -> openCreateGuestDialog());
 
         JButton createReservationButton = new JButton("+ Đặt phòng");
-        createReservationButton.setBackground(PRIMARY);
-        createReservationButton.setForeground(Color.YELLOW);
+        styleToolbarButton(createReservationButton, PRIMARY, Color.WHITE);
         createReservationButton.setFocusPainted(false);
         createReservationButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         createReservationButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -283,8 +281,7 @@ public class StayManagementPanel extends JPanel {
         createReservationButton.addActionListener(e -> openCreateReservationDialog());
 
         JButton refreshButton = new JButton("Làm mới");
-        refreshButton.setBackground(PRIMARY);
-        refreshButton.setForeground(Color.BLACK);
+        styleToolbarButton(refreshButton, new Color(239, 246, 247), PRIMARY);
         refreshButton.setFocusPainted(false);
         refreshButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         refreshButton.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -316,17 +313,19 @@ public class StayManagementPanel extends JPanel {
         };
 
         stayTable = new JTable(tableModel);
-        stayTable.setRowHeight(84);
+        stayTable.setRowHeight(78);
         stayTable.setFillsViewportHeight(true);
         stayTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-        stayTable.setSelectionBackground(new Color(238, 240, 255));
+        stayTable.setSelectionBackground(new Color(225, 243, 245));
         stayTable.setSelectionForeground(TEXT_DARK);
         stayTable.setShowGrid(false);
-        stayTable.setIntercellSpacing(new Dimension(0, 8));
+        stayTable.setIntercellSpacing(new Dimension(0, 6));
+        stayTable.setBackground(Color.WHITE);
         stayTable.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         stayTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
         stayTable.getTableHeader().setBackground(Color.WHITE);
         stayTable.getTableHeader().setForeground(TEXT_DARK);
+        stayTable.getTableHeader().setPreferredSize(new Dimension(0, 38));
         stayTable.getTableHeader().setReorderingAllowed(false);
         stayTable.setDefaultRenderer(Object.class, new StayStatusRenderer());
         stayTable.getColumnModel().getColumn(ACTION_COL).setCellRenderer(new StayActionRenderer());
@@ -370,6 +369,17 @@ public class StayManagementPanel extends JPanel {
         return card;
     }
 
+    private void styleToolbarButton(JButton button, Color background, Color foreground) {
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(false);
+        button.setBorder(new EmptyBorder(8, 14, 8, 14));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    }
+
     private void handleActionClick(StayRow stayRow, int x, int y) {
         if (x < 8 || x > 252 || y < 4 || y > 80) {
             return;
@@ -399,7 +409,27 @@ public class StayManagementPanel extends JPanel {
                 openCheckoutDialog(stayRow);
             }
         } else if ("CHECKED_OUT".equals(stayRow.getStatusCode()) && buttonIndex == 1) {
-            openStayDetailDialog(stayRow);
+            openInvoice(stayRow);
+        }
+    }
+
+    private void openInvoice(StayRow stayRow) {
+        if (stayRow == null || checkoutComplete == null) {
+            return;
+        }
+
+        String sql = "SELECT invoice_id FROM invoices WHERE stay_id = ? ORDER BY invoice_id DESC LIMIT 1";
+        try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, stayRow.getStayId());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    checkoutComplete.accept(resultSet.getInt("invoice_id"));
+                    return;
+                }
+            }
+            JOptionPane.showMessageDialog(this, "Chưa tìm thấy hóa đơn cho lượt lưu trú này.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException exception) {
+            JOptionPane.showMessageDialog(this, "Không thể mở hóa đơn: " + exception.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1106,6 +1136,8 @@ public class StayManagementPanel extends JPanel {
         String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
         String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
         String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
+        String cleaningInsert = "INSERT INTO maintenance_requests (room_id, title, description, maintenance_type, priority, status, reported_by, notes) "
+            + "VALUES (?, ?, ?, 'CLEANING', 'MEDIUM', 'OPEN', COALESCE(?, (SELECT MIN(user_id) FROM users)), ?)";
         String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
 
         try (Connection conn = DBConnection.getConnection()) {
@@ -1211,6 +1243,15 @@ public class StayManagementPanel extends JPanel {
             try (PreparedStatement roomPs = conn.prepareStatement(roomUpdate)) {
                 roomPs.setInt(1, stayRow.getRoomId());
                 roomPs.executeUpdate();
+            }
+
+            try (PreparedStatement cleaningPs = conn.prepareStatement(cleaningInsert)) {
+                cleaningPs.setInt(1, stayRow.getRoomId());
+                cleaningPs.setString(2, "Dọn dẹp phòng sau check-out");
+                cleaningPs.setString(3, "Tự động tạo sau khi khách check-out phòng " + stayRow.getRoomNumber());
+                if (currentUserId == null) cleaningPs.setNull(4, Types.INTEGER); else cleaningPs.setInt(4, currentUserId);
+                cleaningPs.setString(5, "Tạo tự động từ quy trình check-out");
+                cleaningPs.executeUpdate();
             }
 
             conn.commit();
@@ -1492,7 +1533,7 @@ public class StayManagementPanel extends JPanel {
                     panel.add(checkoutBtn);
                 } else if ("CHECKED_OUT".equals(stayRow.getStatusCode())) {
                     JButton viewInvoiceBtn = createActionButton("View Invoice", new Color(245, 247, 255), PRIMARY, PRIMARY);
-                    viewInvoiceBtn.addActionListener(e -> openStayDetailDialog(stayRow));
+                    viewInvoiceBtn.addActionListener(e -> openInvoice(stayRow));
                     panel.add(viewInvoiceBtn);
                 }
             }
@@ -1554,7 +1595,7 @@ public class StayManagementPanel extends JPanel {
                 } else if ("CHECKED_OUT".equals(stayRow.getStatusCode())) {
                     JButton viewInvoiceBtn = createActionButton("View Invoice", new Color(245, 247, 255), PRIMARY, PRIMARY);
                     viewInvoiceBtn.addActionListener(e -> {
-                        openStayDetailDialog(stayRow);
+                        openInvoice(stayRow);
                         fireEditingStopped();
                     });
                     panel.add(viewInvoiceBtn);

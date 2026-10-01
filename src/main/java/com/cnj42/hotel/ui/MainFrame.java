@@ -758,8 +758,8 @@ public class MainFrame extends JFrame {
             fillYs[ys.length + 1] = h - paddingBottom;
 
             GradientPaint gradient = new GradientPaint(
-                    0, 0, new Color(105, 78, 210, 70),
-                    0, h, new Color(105, 78, 210, 0)
+                    0, 0, new Color(24, 119, 135, 70),
+                    0, h, new Color(24, 119, 135, 0)
             );
             g2.setPaint(gradient);
             g2.fillPolygon(fillXs, fillYs, fillXs.length);
@@ -871,7 +871,7 @@ public class MainFrame extends JFrame {
 
         JPanel viewAllWrap = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 12));
         viewAllWrap.setOpaque(false);
-        viewAllWrap.add(createPillButton("Xem tất cả phòng →"));
+        viewAllWrap.add(createPillButton("Xem tất cả phòng →", this::showRoomManagement));
 
         body.add(viewAllWrap, BorderLayout.SOUTH);
 
@@ -913,12 +913,28 @@ public class MainFrame extends JFrame {
         return row;
     }
 
-    private JPanel createPillButton(String text) {
+    private JPanel createPillButton(String text, Runnable action) {
 
-        JPanel pill = new RoundedPanel(PRIMARY_LIGHT, 18);
+        RoundedPanel pill = new RoundedPanel(PRIMARY_LIGHT, 18);
         pill.setLayout(new FlowLayout(FlowLayout.CENTER, 0, 0));
         pill.setBorder(new EmptyBorder(8, 18, 8, 18));
         pill.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        pill.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                action.run();
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                pill.setBackgroundColor(PRIMARY_LIGHT.darker());
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                pill.setBackgroundColor(PRIMARY_LIGHT);
+            }
+        });
 
         JLabel label = new JLabel(text);
         label.setFont(new Font("Segoe UI", Font.BOLD, 12));
@@ -1006,6 +1022,12 @@ public class MainFrame extends JFrame {
         viewAll.setFont(new Font("Segoe UI", Font.BOLD, 12));
         viewAll.setForeground(PRIMARY);
         viewAll.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        viewAll.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                showReservationManagement();
+            }
+        });
         headerRow.add(viewAll, BorderLayout.EAST);
 
         card.add(headerRow, BorderLayout.NORTH);
@@ -1153,6 +1175,7 @@ public class MainFrame extends JFrame {
 
             ensureRoomImageColumn(conn);
             ensureRoomAmenitiesColumn(conn);
+            ensureCleaningMaintenanceType(conn);
 
             int userCount = countRows(conn, "users");
             int roomCount = countRows(conn, "rooms");
@@ -1228,6 +1251,45 @@ public class MainFrame extends JFrame {
         } catch (SQLException e) {
             System.err.println("Warning: unable to inspect/alter amenities column: " + e.getMessage());
             return;
+        }
+    }
+
+    private void ensureCleaningMaintenanceType(Connection conn) {
+        try {
+            if (!tableExists(conn, "maintenance_requests")) {
+                return;
+            }
+
+            String query = "SELECT constraint_name, check_clause FROM information_schema.check_constraints "
+                    + "WHERE constraint_schema = DATABASE() AND table_name = 'maintenance_requests' "
+                    + "AND check_clause LIKE '%maintenance_type%'";
+            String constraintName = null;
+            String checkClause = null;
+            try (PreparedStatement statement = conn.prepareStatement(query); ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    constraintName = resultSet.getString("constraint_name");
+                    checkClause = resultSet.getString("check_clause");
+                }
+            }
+
+            if (checkClause != null && checkClause.toUpperCase(Locale.ROOT).contains("CLEANING")) {
+                return;
+            }
+
+            try (Statement alter = conn.createStatement()) {
+                if (constraintName != null) {
+                    String databaseProduct = conn.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
+                    String safeConstraintName = constraintName.replace("`", "");
+                    String drop = databaseProduct.contains("maria")
+                        ? "ALTER TABLE maintenance_requests DROP CONSTRAINT `" + safeConstraintName + "`"
+                        : "ALTER TABLE maintenance_requests DROP CHECK `" + safeConstraintName + "`";
+                    alter.executeUpdate(drop);
+                }
+                alter.executeUpdate("ALTER TABLE maintenance_requests ADD CONSTRAINT chk_maintenance_type "
+                        + "CHECK (maintenance_type IN ('PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'CLEANING', 'OTHER'))");
+            }
+        } catch (SQLException e) {
+            System.err.println("Warning: unable to enable CLEANING maintenance type: " + e.getMessage());
         }
     }
 

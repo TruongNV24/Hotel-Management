@@ -23,10 +23,10 @@ import java.util.List;
 /** Room list and management page. */
 public class RoomManagerPanel extends JPanel {
     private static final Color PRIMARY = new Color(24, 119, 135);
-    private static final Color BACKGROUND = new Color(248, 248, 251);
-    private static final Color TEXT_DARK = new Color(73, 80, 87);
-    private static final Color TEXT_GRAY = new Color(135, 143, 153);
-    private static final Color BORDER = new Color(239, 242, 247);
+    private static final Color BACKGROUND = new Color(244, 248, 248);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_GRAY = new Color(105, 127, 132);
+    private static final Color BORDER = new Color(225, 233, 235);
     
     // Màu cho trạng thái
     private static final Color GREEN = new Color(52, 195, 143);
@@ -78,9 +78,9 @@ public class RoomManagerPanel extends JPanel {
         this.currentUser = currentUser;
         this.addRoomAction = addRoomAction;
         this.editRoomAction = editRoomAction;
-        setLayout(new BorderLayout(0, 20));
+        setLayout(new BorderLayout(0, 16));
         setBackground(BACKGROUND);
-        setBorder(new EmptyBorder(15, 20, 20, 20));
+        setBorder(new EmptyBorder(8, 14, 18, 14));
 
         add(createSummary(), BorderLayout.NORTH);
         tableModel = new DefaultTableModel(new Object[]{"SỐ PHÒNG", " ", "LOẠI PHÒNG", "TẦNG", "GIÁ / ĐÊM", "TRẠNG THÁI", "GHI CHÚ", "THAO TÁC"}, 0) {
@@ -93,7 +93,7 @@ public class RoomManagerPanel extends JPanel {
     }
 
     private JPanel createSummary() {
-        JPanel summary = new JPanel(new GridLayout(1, 5, 16, 0));
+        JPanel summary = new JPanel(new GridLayout(1, 5, 12, 0));
         summary.setOpaque(false);
         summary.add(statCard("TỔNG SỐ PHÒNG", "Tất cả phòng", totalLabel, null, PRIMARY, 0));
         summary.add(statCard("PHÒNG TRỐNG", "", availableLabel, availableSub, GREEN, 1));
@@ -106,7 +106,7 @@ public class RoomManagerPanel extends JPanel {
     private JPanel statCard(String title, String defaultSub, JLabel valueLabel, JLabel subLabel, Color color, int iconType) {
         JPanel card = new JPanel(new BorderLayout(15, 0));
         card.setBackground(Color.WHITE);
-        card.setBorder(new EmptyBorder(20, 20, 20, 20));
+        card.setBorder(new EmptyBorder(14, 16, 14, 16));
 
         // Icon bên trái
         JPanel iconPanel = new JPanel(new BorderLayout());
@@ -123,7 +123,7 @@ public class RoomManagerPanel extends JPanel {
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
         titleLabel.setForeground(TEXT_GRAY);
         
-        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 26));
         valueLabel.setForeground(color);
 
         JLabel subtitle = subLabel != null ? subLabel : new JLabel(defaultSub);
@@ -158,12 +158,16 @@ public class RoomManagerPanel extends JPanel {
     }
 
     private JPanel createRoomCard() {
-        JPanel card = new JPanel(new BorderLayout(0, 15));
+        JPanel card = new JPanel(new BorderLayout(0, 12));
         card.setBackground(Color.WHITE);
-        card.setBorder(new EmptyBorder(20, 20, 20, 20));
+        card.setBorder(new EmptyBorder(14, 14, 14, 14));
 
-        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        JPanel filters = new JPanel();
+        filters.setLayout(new BoxLayout(filters, BoxLayout.Y_AXIS));
         filters.setOpaque(false);
+
+        JPanel filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filterRow.setOpaque(false);
         
         searchField.setPreferredSize(new Dimension(250, 36));
         searchField.setBorder(BorderFactory.createCompoundBorder(
@@ -172,17 +176,18 @@ public class RoomManagerPanel extends JPanel {
         ));
         searchField.addActionListener(e -> refreshRooms());
         
-        filters.add(searchField);
-        filters.add(label("Loại phòng"));
+        filterRow.add(label("Tìm kiếm"));
+        filterRow.add(searchField);
+        filterRow.add(label("Loại phòng"));
         
         typeFilter.setPreferredSize(new Dimension(150, 36));
         typeFilter.setBackground(Color.WHITE);
-        filters.add(typeFilter);
+        filterRow.add(typeFilter);
         
-        filters.add(label("Trạng thái"));
+        filterRow.add(label("Trạng thái"));
         statusFilter.setPreferredSize(new Dimension(150, 36));
         statusFilter.setBackground(Color.WHITE);
-        filters.add(statusFilter);
+        filterRow.add(statusFilter);
         
         JButton addButton = button("Thêm phòng", PRIMARY, Color.WHITE);
         FontIcon addIcon = new FontIcon();
@@ -197,14 +202,23 @@ public class RoomManagerPanel extends JPanel {
         addWrap.setOpaque(false);
         addWrap.setPreferredSize(new Dimension(200, 36));
         addWrap.add(addButton);
-        filters.add(addWrap);
+        filterRow.add(addWrap);
+
+        JPanel hintRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 7));
+        hintRow.setOpaque(false);
+        JLabel hint = label("Chọn phòng trong bảng để sửa hoặc xóa thông tin phòng");
+        hint.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        hint.setForeground(TEXT_GRAY);
+        hintRow.add(hint);
+        filters.add(filterRow);
+        filters.add(hintRow);
         
         typeFilter.addActionListener(e -> refreshRooms());
         statusFilter.addActionListener(e -> refreshRooms());
         card.add(filters, BorderLayout.NORTH);
 
         JScrollPane scroll = new JScrollPane(roomTable);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setBorder(BorderFactory.createLineBorder(BORDER, 1, true));
         scroll.getViewport().setBackground(Color.WHITE);
         card.add(scroll, BorderLayout.CENTER);
         
@@ -242,8 +256,8 @@ public class RoomManagerPanel extends JPanel {
 
     private JTable createTable() {
         JTable table = new JTable(tableModel);
-        table.setRowHeight(64); // Tăng chiều cao hàng để hiện ảnh to hơn
-        table.setShowVerticalLines(false); // Bỏ kẻ dọc
+        table.setRowHeight(64);
+        table.setShowVerticalLines(false);
         table.setShowHorizontalLines(true);
         table.setGridColor(BORDER);
         table.setIntercellSpacing(new Dimension(0, 0));
@@ -256,9 +270,11 @@ public class RoomManagerPanel extends JPanel {
         
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         table.setForeground(TEXT_DARK);
+        table.setBackground(Color.WHITE);
+        table.setAutoCreateRowSorter(true);
         
         // Màu khi click chọn hàng (Xám rất nhạt thay vì tím đậm)
-        table.setSelectionBackground(new Color(248, 249, 250));
+        table.setSelectionBackground(new Color(225, 243, 245));
         table.setSelectionForeground(TEXT_DARK);
         
         table.getColumnModel().getColumn(0).setPreferredWidth(80);

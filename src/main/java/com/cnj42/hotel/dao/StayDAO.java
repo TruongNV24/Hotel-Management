@@ -258,6 +258,8 @@ public class StayDAO {
         String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
         String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
         String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
+        String cleaningInsert = "INSERT INTO maintenance_requests (room_id, title, description, maintenance_type, priority, status, reported_by, expected_end_at, notes) "
+            + "VALUES (?, ?, ?, 'CLEANING', 'MEDIUM', 'OPEN', COALESCE(?, (SELECT MIN(user_id) FROM users)), NULL, ?)";
         String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
 
         CheckoutSummary summary = getCheckoutSummary(stayId, roomId);
@@ -363,6 +365,15 @@ public class StayDAO {
             try (PreparedStatement roomPs = conn.prepareStatement(roomUpdate)) {
                 roomPs.setInt(1, roomId);
                 roomPs.executeUpdate();
+            }
+
+            try (PreparedStatement cleaningPs = conn.prepareStatement(cleaningInsert)) {
+                cleaningPs.setInt(1, roomId);
+                cleaningPs.setString(2, "Dọn dẹp phòng sau check-out");
+                cleaningPs.setString(3, "Tự động tạo sau khi khách check-out phòng " + roomId);
+                if (currentUserId == null) cleaningPs.setNull(4, Types.INTEGER); else cleaningPs.setInt(4, currentUserId);
+                cleaningPs.setString(5, "Tạo tự động từ quy trình check-out");
+                cleaningPs.executeUpdate();
             }
 
             conn.commit();

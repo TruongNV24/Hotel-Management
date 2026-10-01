@@ -366,6 +366,16 @@ public class ReservationService {
             }
 
             updateRoomStatus(conn, roomId, "CLEANING");
+                try (PreparedStatement cleaningPs = conn.prepareStatement(
+                    "INSERT INTO maintenance_requests (room_id, title, description, maintenance_type, priority, status, reported_by, notes) "
+                        + "VALUES (?, ?, ?, 'CLEANING', 'MEDIUM', 'OPEN', COALESCE(?, (SELECT MIN(user_id) FROM users)), ?)")) {
+                cleaningPs.setInt(1, roomId);
+                cleaningPs.setString(2, "Dọn dẹp phòng sau check-out");
+                cleaningPs.setString(3, "Tự động tạo sau khi khách check-out phòng " + roomId);
+                if (userId == null) cleaningPs.setNull(4, java.sql.Types.INTEGER); else cleaningPs.setInt(4, userId);
+                cleaningPs.setString(5, "Tạo tự động từ quy trình check-out");
+                cleaningPs.executeUpdate();
+                }
             conn.commit();
                 new AuditLogService().logEvent("CHECKOUT_SUCCESS", "RESERVATION", "RESERVATION", reservationId, findUserById(userId),
                     "Checked out reservation id " + reservationId + " from room " + roomId, "127.0.0.1", "SUCCESS");

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS maintenance_requests (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    CONSTRAINT chk_maintenance_type CHECK (maintenance_type IN ('PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'OTHER')),
+    CONSTRAINT chk_maintenance_type CHECK (maintenance_type IN ('PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'CLEANING', 'OTHER')),
     CONSTRAINT chk_maintenance_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
     CONSTRAINT chk_maintenance_status CHECK (status IN ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
     CONSTRAINT chk_maintenance_duration CHECK (duration_minutes IS NULL OR duration_minutes >= 0),
