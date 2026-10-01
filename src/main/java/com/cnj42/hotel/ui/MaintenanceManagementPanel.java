@@ -16,7 +16,7 @@ import java.util.List;
 
 public class MaintenanceManagementPanel extends JPanel {
     private static final Color BACKGROUND = new Color(246, 247, 251);
-    private static final Color PRIMARY = new Color(105, 78, 210);
+    private static final Color PRIMARY = new Color(24, 119, 135);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final User currentUser;
     private final MaintenanceService maintenanceService = new MaintenanceService();

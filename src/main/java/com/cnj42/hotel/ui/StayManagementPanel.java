@@ -32,8 +32,8 @@ import java.util.function.IntConsumer;
 
 public class StayManagementPanel extends JPanel {
 
-    private static final Color PRIMARY = new Color(105, 78, 210);
-    private static final Color PRIMARY_LIGHT = new Color(239, 235, 255);
+    private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color PRIMARY_LIGHT = new Color(231, 245, 246);
     private static final Color BACKGROUND = new Color(246, 247, 251);
     private static final Color CARD = new Color(255, 255, 255);
     private static final Color BORDER = new Color(230, 234, 241);
@@ -103,8 +103,6 @@ public class StayManagementPanel extends JPanel {
         setBackground(BACKGROUND);
         setBorder(new EmptyBorder(14, 16, 18, 16));
 
-        add(buildHeaderPanel(), BorderLayout.NORTH);
-
         JPanel contentCard = new JPanel(new BorderLayout(0, 14));
         contentCard.setOpaque(false);
         contentCard.add(buildStatsPanel(), BorderLayout.NORTH);
@@ -138,25 +136,6 @@ public class StayManagementPanel extends JPanel {
             default:
                 return status.toUpperCase();
         }
-    }
-
-    private JPanel buildHeaderPanel() {
-        JPanel panel = new JPanel();
-        panel.setOpaque(false);
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-
-        JLabel title = new JLabel("Quản lý lưu trú");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 26));
-        title.setForeground(TEXT_DARK);
-
-        JLabel subtitle = new JLabel("Quản lý quá trình nhận phòng, lưu trú và trả phòng của khách");
-        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        subtitle.setForeground(TEXT_MUTED);
-
-        panel.add(title);
-        panel.add(Box.createVerticalStrut(4));
-        panel.add(subtitle);
-        return panel;
     }
 
     private JPanel buildStatsPanel() {

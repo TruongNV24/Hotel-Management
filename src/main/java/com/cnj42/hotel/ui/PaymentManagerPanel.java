@@ -19,7 +19,7 @@ import com.cnj42.hotel.utils.DBConnection;
 
 public class PaymentManagerPanel extends JPanel {
 
-    private static final Color PRIMARY = new Color(105, 78, 210);
+    private static final Color PRIMARY = new Color(24, 119, 135);
     private static final Color BACKGROUND = new Color(246, 247, 251);
     private static final Color CARD = Color.WHITE;
     private static final Color BORDER = new Color(230, 234, 241);

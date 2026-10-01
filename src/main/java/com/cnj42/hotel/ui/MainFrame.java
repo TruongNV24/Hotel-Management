@@ -31,16 +31,16 @@ public class MainFrame extends JFrame {
     // COLORS
     // =========================================================
 
-    private static final Color PRIMARY = new Color(105, 78, 210);
-    private static final Color PRIMARY_LIGHT = new Color(239, 235, 255);
-    private static final Color LOGO_ACCENT = new Color(196, 186, 255);
+    private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color PRIMARY_LIGHT = new Color(231, 245, 246);
+    private static final Color LOGO_ACCENT = new Color(159, 216, 212);
 
-    private static final Color SIDEBAR = new Color(27, 35, 55);
-    private static final Color SIDEBAR_HOVER = new Color(48, 57, 82);
+    private static final Color SIDEBAR = new Color(18, 46, 57);
+    private static final Color SIDEBAR_HOVER = new Color(31, 76, 87);
 
-    private static final Color BACKGROUND = new Color(246, 247, 251);
-    private static final Color TEXT_DARK = new Color(35, 40, 52);
-    private static final Color TEXT_GRAY = new Color(120, 125, 140);
+    private static final Color BACKGROUND = new Color(244, 248, 248);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_GRAY = new Color(105, 127, 132);
 
     private static final Color GREEN = new Color(35, 181, 118);
     private static final Color ORANGE = new Color(245, 153, 55);
@@ -139,7 +139,7 @@ public class MainFrame extends JFrame {
 
         contentPanel = new JPanel(new BorderLayout());
         contentPanel.setBackground(BACKGROUND);
-        contentPanel.setBorder(new EmptyBorder(25, 30, 30, 30));
+        contentPanel.setBorder(new EmptyBorder(28, 34, 34, 34));
 
         mainArea.add(contentPanel, BorderLayout.CENTER);
 
@@ -157,7 +157,7 @@ public class MainFrame extends JFrame {
     private JPanel createSidebar() {
 
         JPanel sidebar = new JPanel(new BorderLayout());
-        sidebar.setPreferredSize(new Dimension(235, 0));
+        sidebar.setPreferredSize(new Dimension(248, 0));
         sidebar.setBackground(SIDEBAR);
 
         // -----------------------------------------------------
@@ -205,9 +205,7 @@ public class MainFrame extends JFrame {
         menu.setBorder(new EmptyBorder(5, 12, 5, 12));
         menu.setLayout(new BoxLayout(menu, BoxLayout.Y_AXIS));
 
-        if (currentUser == null || !UserRole.isAdmin(currentUser)) {
-            addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
-        }
+        addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
 
         addSectionTitle(menu, "QUẢN LÝ");
 
@@ -219,6 +217,7 @@ public class MainFrame extends JFrame {
         }
         if (currentUser != null && PermissionService.canAccessHotelOperations(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.SUITCASE, "Quản lý lưu trú", false, this::showReservationManagement);
+            addMenuButton(menu, FontAwesomeSolid.USERS, "Quản lý khách hàng", false, this::showGuestManagement);
         }
         if (currentUser != null && PermissionService.canManageIncidents(currentUser)) {
             addMenuButton(menu, FontAwesomeSolid.LIST_ALT, "Quản lý sự cố", false, this::showIncidentManagement);
@@ -376,7 +375,7 @@ public class MainFrame extends JFrame {
 
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(Color.WHITE);
-        header.setPreferredSize(new Dimension(0, 75));
+        header.setPreferredSize(new Dimension(0, 82));
         header.setBorder(new EmptyBorder(0, 30, 0, 30));
 
         // ---- Left: hamburger + title ----
@@ -1751,6 +1750,16 @@ public class MainFrame extends JFrame {
         contentPanel.add(new StayManagementPanel(
                 currentUser != null ? currentUser.getUserId() : null,
                 invoiceId -> showPaymentManagement(invoiceId)), BorderLayout.CENTER);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    private void showGuestManagement() {
+        pageTitle.setText("Quản lý khách hàng");
+        pageDescription.setText("Tra cứu và cập nhật thông tin khách hàng");
+
+        contentPanel.removeAll();
+        contentPanel.add(new GuestManagementPanel(currentUser), BorderLayout.CENTER);
         contentPanel.revalidate();
         contentPanel.repaint();
     }

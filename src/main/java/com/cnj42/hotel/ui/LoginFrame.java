@@ -60,7 +60,7 @@ public class LoginFrame extends JFrame {
         brandLabel.setForeground(Color.WHITE);
         brandLabel.setHorizontalAlignment(SwingConstants.CENTER);
         brandLabel.setOpaque(true);
-        brandLabel.setBackground(new Color(105, 79, 229));
+        brandLabel.setBackground(new Color(24, 119, 135));
         brandLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         brandLabel.setPreferredSize(new Dimension(50, 52));
         brandLabel.setMaximumSize(new Dimension(50, 52));
@@ -129,7 +129,7 @@ public class LoginFrame extends JFrame {
         rememberBox.setForeground(new Color(125, 125, 150));
         JLabel forgotLabel = new JLabel("Forgot password?");
         forgotLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        forgotLabel.setForeground(new Color(105, 79, 229));
+        forgotLabel.setForeground(new Color(24, 119, 135));
         optionsPanel.add(rememberBox, BorderLayout.WEST);
         optionsPanel.add(forgotLabel, BorderLayout.EAST);
         formPanel.add(optionsPanel);
@@ -283,10 +283,10 @@ public class LoginFrame extends JFrame {
             GradientPaint gradient = new GradientPaint(
                     0,
                     0,
-                    new Color(105, 80, 205),
+                    new Color(18, 46, 57),
                     width,
                     height,
-                    new Color(180, 75, 190)
+                    new Color(55, 151, 157)
             );
 
             g2.setPaint(gradient);

@@ -22,7 +22,7 @@ import java.util.List;
 
 /** Room list and management page. */
 public class RoomManagerPanel extends JPanel {
-    private static final Color PRIMARY = new Color(85, 110, 230); // Màu tím xanh của nút
+    private static final Color PRIMARY = new Color(24, 119, 135);
     private static final Color BACKGROUND = new Color(248, 248, 251);
     private static final Color TEXT_DARK = new Color(73, 80, 87);
     private static final Color TEXT_GRAY = new Color(135, 143, 153);
@@ -33,7 +33,7 @@ public class RoomManagerPanel extends JPanel {
     private static final Color GREEN_BG = new Color(212, 245, 233);
     private static final Color ORANGE = new Color(241, 180, 76);
     private static final Color ORANGE_BG = new Color(253, 236, 205);
-    private static final Color BLUE = new Color(85, 110, 230);
+    private static final Color BLUE = new Color(44, 145, 164);
     private static final Color BLUE_BG = new Color(223, 229, 252);
     private static final Color RED = new Color(244, 106, 106);
     private static final Color RED_BG = new Color(253, 225, 225);
@@ -631,7 +631,7 @@ public class RoomManagerPanel extends JPanel {
             g2.drawRoundRect(x, yPos, btnW, btnH, 8, 8);
             
             // Vẽ cây bút
-            g2.setColor(new Color(85, 110, 230));
+            g2.setColor(new Color(44, 145, 164));
             g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             int px = x + 9, py = yPos + 18;
             g2.drawLine(px, py, px + 3, py + 3); // tip

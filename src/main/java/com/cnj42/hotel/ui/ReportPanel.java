@@ -15,7 +15,7 @@ import java.text.DecimalFormat;
 public class ReportPanel extends JPanel {
 
     private static final Color BACKGROUND = new Color(246, 247, 251);
-    private static final Color PRIMARY = new Color(105, 78, 210);
+    private static final Color PRIMARY = new Color(24, 119, 135);
     private static final Color TEXT_DARK = new Color(35, 40, 52);
     private static final Color TEXT_GRAY = new Color(120, 125, 140);
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0");

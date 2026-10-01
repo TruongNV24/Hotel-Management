@@ -40,8 +40,8 @@ import org.kordamp.ikonli.swing.FontIcon;
 public class AddRoomPanel extends JPanel {
 
     // ---- Palette (kept consistent with RoomManagementPanel) ----
-    private static final Color PRIMARY = new Color(105, 78, 210);
-    private static final Color PRIMARY_LIGHT = new Color(239, 235, 255);
+    private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color PRIMARY_LIGHT = new Color(231, 245, 246);
     private static final Color BACKGROUND = new Color(246, 247, 251);
     private static final Color TEXT_DARK = new Color(35, 40, 52);
     private static final Color TEXT_GRAY = new Color(120, 125, 140);
