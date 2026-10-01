@@ -147,7 +147,11 @@ public class MainFrame extends JFrame {
 
         setContentPane(root);
 
-        showDashboard();
+        if (currentUser != null && UserRole.isAdmin(currentUser)) {
+            showAccountManagement();
+        } else {
+            showDashboard();
+        }
     }
 
     // =========================================================
@@ -205,7 +209,9 @@ public class MainFrame extends JFrame {
         menu.setBorder(new EmptyBorder(5, 12, 5, 12));
         menu.setLayout(new BoxLayout(menu, BoxLayout.Y_AXIS));
 
-        addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
+        if (currentUser == null || !UserRole.isAdmin(currentUser)) {
+            addMenuButton(menu, FontAwesomeSolid.HOME, "Dashboard", true, this::showDashboard);
+        }
 
         addSectionTitle(menu, "QUẢN LÝ");
 

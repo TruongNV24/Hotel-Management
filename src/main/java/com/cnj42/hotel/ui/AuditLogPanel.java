@@ -13,6 +13,12 @@ import java.util.List;
 
 public class AuditLogPanel extends JPanel {
 
+    private static final Color BACKGROUND = new Color(244, 248, 248);
+    private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_MUTED = new Color(105, 127, 132);
+    private static final Color BORDER = new Color(225, 233, 235);
+
     private final User currentUser;
     private final AuditLogService auditLogService = new AuditLogService();
     private JTable logTable;
@@ -31,17 +37,23 @@ public class AuditLogPanel extends JPanel {
             return;
         }
 
-        setBackground(new Color(246, 248, 251));
-        setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        setBackground(BACKGROUND);
+        setLayout(new BorderLayout(0, 16));
+        setBorder(BorderFactory.createEmptyBorder(8, 14, 18, 14));
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        toolbar.setOpaque(false);
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        toolbar.setBackground(Color.WHITE);
+        toolbar.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER, 1, true),
+            BorderFactory.createEmptyBorder(10, 12, 10, 12)
+        ));
 
         JTextField searchField = new JTextField(20);
         searchField.setToolTipText("Tìm theo người dùng, chi tiết, module");
         JButton refreshBtn = new JButton("Làm mới");
         JButton filterBtn = new JButton("Lọc");
+        styleButton(refreshBtn, new Color(239, 246, 247), PRIMARY);
+        styleButton(filterBtn, PRIMARY, Color.WHITE);
 
         toolbar.add(new JLabel("Tìm kiếm:"));
         toolbar.add(searchField);
@@ -58,9 +70,21 @@ public class AuditLogPanel extends JPanel {
         };
 
         logTable = new JTable(tableModel);
-        logTable.setRowHeight(28);
+        logTable.setRowHeight(36);
         logTable.setFillsViewportHeight(true);
         logTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        logTable.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        logTable.setForeground(TEXT_DARK);
+        logTable.setBackground(Color.WHITE);
+        logTable.setSelectionBackground(new Color(225, 243, 245));
+        logTable.setSelectionForeground(TEXT_DARK);
+        logTable.setShowVerticalLines(false);
+        logTable.setGridColor(new Color(239, 243, 244));
+        logTable.setAutoCreateRowSorter(true);
+        logTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
+        logTable.getTableHeader().setForeground(TEXT_MUTED);
+        logTable.getTableHeader().setBackground(new Color(247, 250, 250));
+        logTable.getTableHeader().setPreferredSize(new Dimension(0, 38));
         logTable.getColumnModel().getColumn(0).setPreferredWidth(60);
         logTable.getColumnModel().getColumn(1).setPreferredWidth(150);
         logTable.getColumnModel().getColumn(2).setPreferredWidth(140);
@@ -77,6 +101,17 @@ public class AuditLogPanel extends JPanel {
         filterBtn.addActionListener(e -> loadLogs(searchField.getText(), null, null, null));
 
         loadLogs(null, null, null, null);
+    }
+
+    private void styleButton(JButton button, Color background, Color foreground) {
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(8, 13, 8, 13));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
     private void loadLogs(String keyword, String action, String module, String status) {

@@ -17,12 +17,23 @@ import java.util.Objects;
 
 public class AccountManagerPanel extends JPanel {
 
+    private static final Color BACKGROUND = new Color(244, 248, 248);
+    private static final Color PRIMARY = new Color(24, 119, 135);
+    private static final Color TEXT_DARK = new Color(30, 53, 61);
+    private static final Color TEXT_MUTED = new Color(105, 127, 132);
+    private static final Color BORDER = new Color(225, 233, 235);
+    private static final Color GREEN = new Color(45, 160, 108);
+    private static final Color RED = new Color(214, 82, 88);
+
     private final UserService userService = new UserService();
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{"Tất cả", "ACTIVE", "INACTIVE"});
     private final JTextField searchField = new JTextField();
     private final User currentUser;
+    private final JLabel totalCount = new JLabel("0");
+    private final JLabel activeCount = new JLabel("0");
+    private final JLabel inactiveCount = new JLabel("0");
 
     public AccountManagerPanel() {
         this(null);
@@ -30,28 +41,32 @@ public class AccountManagerPanel extends JPanel {
 
     public AccountManagerPanel(User currentUser) {
         this.currentUser = currentUser;
-        setLayout(new BorderLayout(0, 12));
-        setBorder(new EmptyBorder(12, 12, 12, 12));
+        setLayout(new BorderLayout(0, 16));
+        setBackground(BACKGROUND);
+        setBorder(new EmptyBorder(8, 14, 18, 14));
 
         // Header + controls (search + filter + add)
-        JPanel top = new JPanel(new BorderLayout(12, 0));
+        JPanel top = new JPanel(new BorderLayout(0, 14));
         top.setOpaque(false);
 
-        JLabel title = new JLabel("Quản lý tài khoản");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        top.add(title, BorderLayout.WEST);
+        top.add(buildStatsPanel(), BorderLayout.NORTH);
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        controls.setOpaque(false);
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        controls.setBackground(Color.WHITE);
+        controls.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER, 1, true),
+            new EmptyBorder(10, 12, 10, 12)
+        ));
 
-        JTextField search = new JTextField();
-        search.setPreferredSize(new Dimension(220, 34));
-        search.addActionListener(e -> refreshUsers(search.getText().trim(), statusFilter.getSelectedItem().toString()));
-        controls.add(search);
+        searchField.setPreferredSize(new Dimension(260, 36));
+        searchField.putClientProperty("JTextField.placeholderText", "Tìm theo username hoặc họ tên");
+        searchField.addActionListener(e -> refreshUsers(searchField.getText().trim(), statusFilter.getSelectedItem().toString()));
+        controls.add(new JLabel("Tìm kiếm"));
+        controls.add(searchField);
 
-        JComboBox<String> statusFilter = new JComboBox<>(new String[]{"Tất cả", "ACTIVE", "INACTIVE"});
-        statusFilter.setPreferredSize(new Dimension(140, 34));
-        statusFilter.addActionListener(e -> refreshUsers(search.getText().trim(), statusFilter.getSelectedItem().toString()));
+        statusFilter.setPreferredSize(new Dimension(140, 36));
+        statusFilter.addActionListener(e -> refreshUsers(searchField.getText().trim(), statusFilter.getSelectedItem().toString()));
+        controls.add(new JLabel("Trạng thái"));
         controls.add(statusFilter);
 
         JButton addBtn = new JButton("Thêm tài khoản");
@@ -63,9 +78,10 @@ public class AccountManagerPanel extends JPanel {
             }
             openUserDialog(null);
         });
+        styleButton(addBtn, PRIMARY, Color.WHITE);
         controls.add(addBtn);
 
-        top.add(controls, BorderLayout.EAST);
+        top.add(controls, BorderLayout.SOUTH);
 
         add(top, BorderLayout.NORTH);
 
@@ -75,6 +91,18 @@ public class AccountManagerPanel extends JPanel {
 
         table = new JTable(tableModel);
         table.setRowHeight(36);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.setForeground(TEXT_DARK);
+        table.setBackground(Color.WHITE);
+        table.setSelectionBackground(new Color(225, 243, 245));
+        table.setSelectionForeground(TEXT_DARK);
+        table.setShowVerticalLines(false);
+        table.setGridColor(new Color(239, 243, 244));
+        table.setAutoCreateRowSorter(true);
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
+        table.getTableHeader().setForeground(TEXT_MUTED);
+        table.getTableHeader().setBackground(new Color(247, 250, 250));
+        table.getTableHeader().setPreferredSize(new Dimension(0, 38));
         table.getColumnModel().getColumn(0).setPreferredWidth(40);
         table.getColumnModel().getColumn(7).setPreferredWidth(160);
         // Use editor to make buttons clickable
@@ -114,7 +142,10 @@ public class AccountManagerPanel extends JPanel {
     private void refreshUsers(String keyword, String status) {
         tableModel.setRowCount(0);
         List<User> users = userService.getAllUsers();
+        int active = 0;
+        int inactive = 0;
         for (User u : users) {
+            if ("ACTIVE".equalsIgnoreCase(u.getStatus())) active++; else inactive++;
             if (keyword != null && !keyword.isBlank()) {
                 String k = keyword.toLowerCase();
                 if (!(String.valueOf(u.getUsername()).toLowerCase().contains(k) || String.valueOf(u.getFullName()).toLowerCase().contains(k))) continue;
@@ -122,6 +153,53 @@ public class AccountManagerPanel extends JPanel {
             if (status != null && !"Tất cả".equals(status) && !status.equals(u.getStatus())) continue;
             tableModel.addRow(new Object[]{u.getUserId(), u.getUsername(), u.getFullName(), u.getRole(), u.getPhone(), u.getEmail(), u.getStatus(), u});
         }
+        totalCount.setText(String.valueOf(users.size()));
+        activeCount.setText(String.valueOf(active));
+        inactiveCount.setText(String.valueOf(inactive));
+    }
+
+    private JPanel buildStatsPanel() {
+        JPanel stats = new JPanel(new GridLayout(1, 3, 12, 0));
+        stats.setOpaque(false);
+        stats.add(metricCard("TỔNG TÀI KHOẢN", totalCount, "Tất cả người dùng", PRIMARY));
+        stats.add(metricCard("ĐANG HOẠT ĐỘNG", activeCount, "Có thể đăng nhập", GREEN));
+        stats.add(metricCard("NGỪNG HOẠT ĐỘNG", inactiveCount, "Đang bị khóa", RED));
+        return stats;
+    }
+
+    private JPanel metricCard(String title, JLabel value, String helper, Color accent) {
+        JPanel card = new JPanel(new BorderLayout(12, 0));
+        card.setBackground(Color.WHITE);
+        card.setBorder(new EmptyBorder(14, 16, 14, 16));
+        JPanel marker = new JPanel();
+        marker.setBackground(accent);
+        marker.setPreferredSize(new Dimension(5, 46));
+        card.add(marker, BorderLayout.WEST);
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        titleLabel.setForeground(TEXT_MUTED);
+        value.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        value.setForeground(accent);
+        JLabel helperLabel = new JLabel(helper);
+        helperLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        helperLabel.setForeground(TEXT_MUTED);
+        text.add(titleLabel); text.add(Box.createVerticalStrut(2)); text.add(value); text.add(helperLabel);
+        card.add(text, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void styleButton(JButton button, Color background, Color foreground) {
+        button.setBackground(background);
+        button.setForeground(foreground);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(8, 13, 8, 13));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
     // Table cell editor for action buttons
