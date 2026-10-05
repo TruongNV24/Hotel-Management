@@ -57,6 +57,22 @@ public class RoomDAO {
         return rooms;
     }
 
+    public List<Room> getAvailableRooms() throws SQLException {
+        String sql = "SELECT room_id, room_number FROM rooms WHERE status = 'AVAILABLE' ORDER BY room_number";
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<Room> rooms = new ArrayList<>();
+            while (resultSet.next()) {
+                Room room = new Room();
+                room.setRoomId(resultSet.getInt("room_id"));
+                room.setRoomNumber(resultSet.getString("room_number"));
+                rooms.add(room);
+            }
+            return rooms;
+        }
+    }
+
     public List<Room> searchRooms(String keyword, String status) throws SQLException {
         StringBuilder sql = new StringBuilder(
                 "SELECT r.room_id, r.room_number, r.room_type_id, r.floor, " +

@@ -1,13 +1,14 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.DashboardData;
+import com.cnj42.hotel.model.Reservation;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.model.UserRole;
 import com.cnj42.hotel.service.DashboardService;
 import com.cnj42.hotel.service.AuditLogService;
+import com.cnj42.hotel.service.DatabaseBootstrapService;
 import com.cnj42.hotel.service.PermissionService;
 import com.cnj42.hotel.service.RoomService;
-import com.cnj42.hotel.utils.DBConnection;
 import java.util.Locale;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -15,12 +16,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.sql.*;
 import java.text.DecimalFormat;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -64,6 +59,8 @@ public class MainFrame extends JFrame {
     private final User currentUser;
     private final DashboardService dashboardService;
     private final AuditLogService auditLogService;
+    private final DatabaseBootstrapService databaseBootstrapService = new DatabaseBootstrapService();
+    private final RoomService roomService = new RoomService();
 
     // =========================================================
     // UI
@@ -951,29 +948,8 @@ public class MainFrame extends JFrame {
     }
 
     private void loadRoomStatus(JPanel container) {
-
-        String sql = "SELECT room_number, " +
-            "CASE WHEN rooms.status = 'AVAILABLE' AND EXISTS (" +
-            "SELECT 1 FROM reservations res WHERE res.room_id = rooms.room_id " +
-            "AND res.status IN ('PENDING', 'CONFIRMED')) THEN 'RESERVED' " +
-            "ELSE rooms.status END AS status " +
-            "FROM rooms " +
-                "ORDER BY room_number";
-
-        try (
-                Connection conn = DBConnection.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                ResultSet rs = stmt.executeQuery()
-        ) {
-
-            while (rs.next()) {
-                String roomNumber = rs.getString("room_number");
-                String status = rs.getString("status");
-                container.add(createRoomItem(roomNumber, status));
-            }
-
-        } catch (SQLException e) {
-            showDatabaseError("Không thể tải tình trạng phòng", e);
+        for (com.cnj42.hotel.model.Room room : roomService.getAllRooms()) {
+            container.add(createRoomItem(room.getRoomNumber(), room.getStatus()));
         }
     }
 
@@ -1055,55 +1031,14 @@ public class MainFrame extends JFrame {
     }
 
     private void loadRecentReservations(JPanel container) {
-
-        /*
-         * Lấy 5 đơn đặt phòng gần nhất.
-         *
-         * Quan hệ:
-         * reservations
-         *      ↓
-         * reservation_guests
-         *      ↓
-         * guests
-         */
-
-        String sql = "SELECT " +
-                "r.reservation_id, " +
-                "r.check_in_date, " +
-                "r.status, " +
-                "g.full_name " +
-                "FROM reservations r " +
-                "LEFT JOIN reservation_guests rg " +
-                "ON r.reservation_id = rg.reservation_id " +
-                "LEFT JOIN guests g " +
-                "ON rg.guest_id = g.guest_id " +
-                "ORDER BY r.created_at DESC " +
-                "LIMIT 5";
-
-        try (
-                Connection conn = DBConnection.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                ResultSet rs = stmt.executeQuery()
-        ) {
-
-            int index = 0;
-
-            while (rs.next()) {
-
-                String guest = rs.getString("full_name");
-                Date date = rs.getDate("check_in_date");
-                String status = rs.getString("status");
-
-                container.add(createReservationItem(guest, date, status, index));
-                index++;
-            }
-
-        } catch (SQLException e) {
-            showDatabaseError("Không thể tải danh sách đặt phòng", e);
+        int index = 0;
+        for (Reservation reservation : dashboardService.getRecentReservations()) {
+            container.add(createReservationItem(reservation.getGuestName(), reservation.getCheckInDate(),
+                    reservation.getStatus(), index++));
         }
     }
 
-    private JPanel createReservationItem(String guest, Date date, String status, int index) {
+    private JPanel createReservationItem(String guest, String date, String status, int index) {
 
         JPanel item = new JPanel(new BorderLayout());
         item.setOpaque(false);
@@ -1126,7 +1061,7 @@ public class MainFrame extends JFrame {
         guestLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
         guestLabel.setForeground(TEXT_DARK);
 
-        JLabel dateLabel = new JLabel(date != null ? date.toString() : "");
+        JLabel dateLabel = new JLabel(date != null ? date : "");
         dateLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         dateLabel.setForeground(TEXT_GRAY);
 
@@ -1166,209 +1101,7 @@ public class MainFrame extends JFrame {
     // =========================================================
 
     private void ensureDatabaseReady() {
-
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setCatalog("hotel_management");
-
-            boolean hasUsers = tableExists(conn, "users");
-            boolean hasRooms = tableExists(conn, "rooms");
-            boolean hasReservations = tableExists(conn, "reservations");
-
-            if (!hasUsers || !hasRooms || !hasReservations) {
-                bootstrapDatabaseFromSqlFile();
-                return;
-            }
-
-            ensureRoomImageColumn(conn);
-            ensureRoomAmenitiesColumn(conn);
-            ensureCleaningMaintenanceType(conn);
-
-            int userCount = countRows(conn, "users");
-            int roomCount = countRows(conn, "rooms");
-            int reservationCount = countRows(conn, "reservations");
-
-            if (userCount == 0 || roomCount == 0 || reservationCount == 0) {
-                bootstrapDatabaseFromSqlFile();
-            }
-
-        } catch (SQLException e) {
-            if (e.getMessage() != null && e.getMessage().contains("Unknown database")) {
-                bootstrapDatabaseFromSqlFile();
-                return;
-            }
-            System.err.println("Database bootstrap check failed: " + e.getMessage());
-        }
-    }
-
-    private void ensureRoomImageColumn(Connection conn) {
-        String sql = "SELECT data_type FROM information_schema.columns " +
-                "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'image_path'";
-        try {
-            try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            if (!rs.next()) {
-                try {
-                    try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms ADD COLUMN image_path JSON AFTER status");
-                    }
-                } catch (SQLException e) {
-                    System.err.println("Warning: failed to add image_path column: " + e.getMessage());
-                }
-            } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
-                try {
-                    try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN image_path JSON");
-                    }
-                } catch (SQLException e) {
-                    System.err.println("Warning: failed to modify image_path column to JSON: " + e.getMessage());
-                }
-            }
-            }
-        } catch (SQLException e) {
-            System.err.println("Warning: unable to inspect/alter image_path column: " + e.getMessage());
-            return;
-        }
-    }
-
-    private void ensureRoomAmenitiesColumn(Connection conn) {
-        String sql = "SELECT data_type FROM information_schema.columns " +
-                "WHERE table_schema = DATABASE() AND table_name = 'rooms' AND column_name = 'amenities'";
-        try {
-            try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            if (!rs.next()) {
-                try {
-                    try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms ADD COLUMN amenities JSON AFTER image_path");
-                    }
-                } catch (SQLException e) {
-                    System.err.println("Warning: failed to add amenities column: " + e.getMessage());
-                }
-            } else if (!isJsonColumnType(conn, rs.getString("data_type"))) {
-                try {
-                    try (Statement alter = conn.createStatement()) {
-                        alter.executeUpdate("ALTER TABLE rooms MODIFY COLUMN amenities JSON");
-                    }
-                } catch (SQLException e) {
-                    System.err.println("Warning: failed to modify amenities column to JSON: " + e.getMessage());
-                }
-            }
-            }
-        } catch (SQLException e) {
-            System.err.println("Warning: unable to inspect/alter amenities column: " + e.getMessage());
-            return;
-        }
-    }
-
-    private void ensureCleaningMaintenanceType(Connection conn) {
-        try {
-            if (!tableExists(conn, "maintenance_requests")) {
-                return;
-            }
-
-            String query = "SELECT constraint_name, check_clause FROM information_schema.check_constraints "
-                    + "WHERE constraint_schema = DATABASE() AND table_name = 'maintenance_requests' "
-                    + "AND check_clause LIKE '%maintenance_type%'";
-            String constraintName = null;
-            String checkClause = null;
-            try (PreparedStatement statement = conn.prepareStatement(query); ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    constraintName = resultSet.getString("constraint_name");
-                    checkClause = resultSet.getString("check_clause");
-                }
-            }
-
-            if (checkClause != null && checkClause.toUpperCase(Locale.ROOT).contains("CLEANING")) {
-                return;
-            }
-
-            try (Statement alter = conn.createStatement()) {
-                if (constraintName != null) {
-                    String databaseProduct = conn.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
-                    String safeConstraintName = constraintName.replace("`", "");
-                    String drop = databaseProduct.contains("maria")
-                        ? "ALTER TABLE maintenance_requests DROP CONSTRAINT `" + safeConstraintName + "`"
-                        : "ALTER TABLE maintenance_requests DROP CHECK `" + safeConstraintName + "`";
-                    alter.executeUpdate(drop);
-                }
-                alter.executeUpdate("ALTER TABLE maintenance_requests ADD CONSTRAINT chk_maintenance_type "
-                        + "CHECK (maintenance_type IN ('PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'CLEANING', 'OTHER'))");
-            }
-        } catch (SQLException e) {
-            System.err.println("Warning: unable to enable CLEANING maintenance type: " + e.getMessage());
-        }
-    }
-
-    private boolean isJsonColumnType(Connection conn, String dataType) throws SQLException {
-        if ("json".equalsIgnoreCase(dataType)) return true;
-        return "longtext".equalsIgnoreCase(dataType)
-                && conn.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT).contains("maria");
-    }
-
-    private boolean tableExists(Connection conn, String tableName) throws SQLException {
-
-        String sql = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?";
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, tableName);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() && rs.getInt(1) > 0;
-            }
-        }
-    }
-
-    private int countRows(Connection conn, String tableName) throws SQLException {
-
-        String sql = "SELECT COUNT(*) FROM " + tableName;
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
-    }
-
-    private void bootstrapDatabaseFromSqlFile() {
-
-        Path sqlPath = Paths.get("database", "hotel_management.sql");
-
-        if (!Files.exists(sqlPath)) {
-            System.err.println("SQL bootstrap file not found: " + sqlPath.toAbsolutePath());
-            return;
-        }
-
-        try {
-            String sql = Files.readString(sqlPath, StandardCharsets.UTF_8);
-            String cleaned = sql
-                    .replaceAll("(?s)/\\*.*?\\*/", "")
-                    .replaceAll("--.*", "")
-                    .replaceAll("(?m)^\\s*USE\\s+.*;?\\s*$", "");
-
-            String[] statements = cleaned.split(";");
-
-            try (Connection conn = DBConnection.getConnection();
-                 Statement statement = conn.createStatement()) {
-
-                statement.execute("CREATE DATABASE IF NOT EXISTS hotel_management");
-                statement.execute("USE hotel_management");
-
-                for (String part : statements) {
-                    String trimmed = part.trim();
-                    if (trimmed.isEmpty() || trimmed.startsWith("CREATE DATABASE") || trimmed.startsWith("DROP DATABASE")
-                            || trimmed.startsWith("USE ")) {
-                        continue;
-                    }
-
-                    if (trimmed.startsWith("INSERT") || trimmed.startsWith("CREATE TABLE")
-                            || trimmed.startsWith("CREATE VIEW") || trimmed.startsWith("ALTER")
-                            || trimmed.startsWith("CREATE INDEX") || trimmed.startsWith("INSERT INTO")) {
-                        statement.execute(trimmed);
-                    }
-                }
-            }
-
-        } catch (IOException | SQLException e) {
-            System.err.println("Failed to bootstrap database from SQL file: " + e.getMessage());
-        }
+        databaseBootstrapService.ensureReady();
     }
 
     private void loadDashboardData() {
@@ -1401,33 +1134,6 @@ public class MainFrame extends JFrame {
             revenueTotalLabel.setText(formatMoney(data.getMonthlyRevenue()));
             revenueChangeLabel.setText(buildRevenueChangeText(data.getMonthlyRevenue(), data.getPreviousMonthRevenue()));
         });
-    }
-
-    private int[] loadRoomStatusSummary(Connection conn) throws SQLException {
-
-        String sql = "SELECT status, COUNT(*) FROM rooms GROUP BY status";
-        int[] values = new int[]{0, 0, 0, 0, 0};
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                String status = rs.getString("status");
-                int count = rs.getInt(2);
-
-                switch (status == null ? "" : status.toUpperCase()) {
-                    case "AVAILABLE" -> values[0] = count;
-                    case "OCCUPIED" -> values[1] = count;
-                    case "RESERVED" -> values[2] = count;
-                    case "MAINTENANCE" -> values[3] = count;
-                    case "CLEANING" -> values[4] = count;
-                    default -> {
-                    }
-                }
-            }
-        }
-
-        return values;
     }
 
     private void refreshRoomLegend(int[] values) {
@@ -1485,57 +1191,6 @@ public class MainFrame extends JFrame {
         return row;
     }
 
-    private int[] loadRevenueTrend(Connection conn) throws SQLException {
-
-        String sql = "SELECT DATE_FORMAT(issued_at, '%Y-%m') AS month_key, COALESCE(SUM(total_amount), 0) AS total " +
-                "FROM invoices " +
-                "WHERE issued_at >= DATE_SUB(CURRENT_DATE, INTERVAL 5 MONTH) " +
-                "GROUP BY DATE_FORMAT(issued_at, '%Y-%m') " +
-                "ORDER BY month_key ASC";
-
-        int[] values = new int[6];
-        java.util.Map<String, Integer> monthMap = new java.util.HashMap<>();
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                String month = rs.getString("month_key");
-                int amount = rs.getInt("total");
-                monthMap.put(month, amount);
-            }
-        }
-
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        for (int i = 5; i >= 0; i--) {
-            cal.add(java.util.Calendar.MONTH, -1);
-            String key = String.format(Locale.US, "%04d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1);
-            values[5 - i] = monthMap.getOrDefault(key, 0);
-        }
-
-        return values;
-    }
-
-    private long loadMonthlyRevenue(Connection conn) throws SQLException {
-
-        String sql = "SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE MONTH(issued_at) = MONTH(CURRENT_DATE) AND YEAR(issued_at) = YEAR(CURRENT_DATE)";
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            return rs.next() ? rs.getLong(1) : 0L;
-        }
-    }
-
-    private long loadPreviousMonthRevenue(Connection conn) throws SQLException {
-
-        String sql = "SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE MONTH(issued_at) = MONTH(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)) AND YEAR(issued_at) = YEAR(DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH))";
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            return rs.next() ? rs.getLong(1) : 0L;
-        }
-    }
-
     private String formatMoney(long value) {
         return MONEY_FORMAT.format(value) + " đ";
     }
@@ -1562,21 +1217,6 @@ public class MainFrame extends JFrame {
 
         double percent = (value * 100.0) / total;
         return String.format("%.1f", percent) + "% tổng số phòng";
-    }
-
-    private int executeCount(Connection conn, String sql) throws SQLException {
-
-        try (
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                ResultSet rs = stmt.executeQuery()
-        ) {
-
-            if (rs.next()) {
-                return rs.getInt(1);
-            }
-        }
-
-        return 0;
     }
 
     // =========================================================
@@ -1968,10 +1608,6 @@ public class MainFrame extends JFrame {
     // =========================================================
     // DATABASE ERROR
     // =========================================================
-
-    private void showDatabaseError(String message, SQLException e) {
-        System.err.println(message + ": " + e.getMessage());
-    }
 
     // =========================================================
     // ROUNDED PANEL

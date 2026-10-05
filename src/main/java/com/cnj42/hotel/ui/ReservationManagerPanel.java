@@ -1,7 +1,11 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.Reservation;
+import com.cnj42.hotel.model.Guest;
+import com.cnj42.hotel.model.Room;
+import com.cnj42.hotel.service.GuestService;
 import com.cnj42.hotel.service.ReservationService;
+import com.cnj42.hotel.service.RoomService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -12,6 +16,8 @@ import java.util.List;
 public class ReservationManagerPanel extends JPanel {
 
     private final ReservationService reservationService = new ReservationService();
+    private final GuestService guestService = new GuestService();
+    private final RoomService roomService = new RoomService();
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final Integer currentUserId;
@@ -95,14 +101,10 @@ public class ReservationManagerPanel extends JPanel {
         JPanel p = new JPanel(new GridBagLayout()); GridBagConstraints c = new GridBagConstraints(); c.insets = new Insets(6,6,6,6); c.fill = GridBagConstraints.HORIZONTAL;
         class Item { int id; String label; Item(int id, String label){this.id=id;this.label=label;} @Override public String toString(){return label + " ("+id+")";} }
         JComboBox<Item> guestBox = new JComboBox<>();
-        try (java.sql.Connection conn = com.cnj42.hotel.utils.DBConnection.getConnection(); java.sql.PreparedStatement ps = conn.prepareStatement("SELECT guest_id, full_name FROM guests ORDER BY full_name"); java.sql.ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) guestBox.addItem(new Item(rs.getInt(1), rs.getString(2)));
-        } catch (java.sql.SQLException ex) { System.err.println("Lỗi load guests: " + ex.getMessage()); }
-        JButton addG = new JButton("+ Khách mới"); addG.addActionListener(e -> { GuestDialog gd = new GuestDialog(d); gd.setVisible(true); if (gd.isSaved()) { guestBox.removeAllItems(); try (java.sql.Connection conn = com.cnj42.hotel.utils.DBConnection.getConnection(); java.sql.PreparedStatement ps = conn.prepareStatement("SELECT guest_id, full_name FROM guests ORDER BY full_name"); java.sql.ResultSet rs = ps.executeQuery()) { while (rs.next()) guestBox.addItem(new Item(rs.getInt(1), rs.getString(2))); } catch (java.sql.SQLException ex) { } } });
+        for (Guest guest : guestService.findAll()) guestBox.addItem(new Item(guest.getGuestId(), guest.getFullName()));
+        JButton addG = new JButton("+ Khách mới"); addG.addActionListener(e -> { GuestDialog gd = new GuestDialog(d); gd.setVisible(true); if (gd.isSaved()) { guestBox.removeAllItems(); for (Guest guest : guestService.findAll()) guestBox.addItem(new Item(guest.getGuestId(), guest.getFullName())); } });
         JComboBox<Item> roomBox = new JComboBox<>();
-        try (java.sql.Connection conn = com.cnj42.hotel.utils.DBConnection.getConnection(); java.sql.PreparedStatement ps = conn.prepareStatement("SELECT room_id, room_number FROM rooms WHERE status = 'AVAILABLE' ORDER BY room_number"); java.sql.ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) roomBox.addItem(new Item(rs.getInt(1), rs.getString(2)));
-        } catch (java.sql.SQLException ex) { System.err.println("Lỗi load rooms: " + ex.getMessage()); }
+        for (Room room : roomService.getAvailableRooms()) roomBox.addItem(new Item(room.getRoomId(), room.getRoomNumber()));
         JTextField numField = new JTextField("1",6);
         JTextField noteField = new JTextField(20);
         c.gridx=0; c.gridy=0; p.add(new JLabel("Khách:"), c); c.gridx=1; p.add(guestBox, c); c.gridx=2; p.add(addG, c);

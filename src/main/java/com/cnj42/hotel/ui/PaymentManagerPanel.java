@@ -8,14 +8,11 @@ import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.model.LookupOption;
 
 public class PaymentManagerPanel extends JPanel {
 
@@ -203,56 +200,20 @@ public class PaymentManagerPanel extends JPanel {
         tableModel.setRowCount(0);
         String keyword = searchField.getText() == null ? "" : searchField.getText().trim();
         String selectedStatus = (String) statusFilter.getSelectedItem();
-        String sql = "SELECT i.invoice_id, i.invoice_code, i.stay_id, r.room_number, i.room_amount, i.service_amount, " +
-                     "i.discount_amount, i.tax_amount, i.total_amount, i.status " +
-                     "FROM invoices i " +
-                     "JOIN stays s ON i.stay_id = s.stay_id " +
-                 "JOIN rooms r ON s.room_id = r.room_id " +
-                 "WHERE (? = '' OR i.invoice_code LIKE ? OR r.room_number LIKE ?) " +
-                 "AND (? = 'Tất cả' OR i.status = ?) " +
-                     "ORDER BY i.issued_at DESC";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             PreparedStatement statsPs = conn.prepareStatement(
-                 "SELECT COUNT(*) AS invoice_count, " +
-                 "SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) AS paid_count, " +
-                 "SUM(CASE WHEN status = 'UNPAID' THEN 1 ELSE 0 END) AS unpaid_count, " +
-                 "COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_amount ELSE 0 END), 0) AS revenue " +
-                 "FROM invoices")) {
-            String like = "%" + keyword + "%";
-            ps.setString(1, keyword);
-            ps.setString(2, like);
-            ps.setString(3, like);
-            ps.setString(4, selectedStatus == null ? "Tất cả" : selectedStatus);
-            ps.setString(5, selectedStatus == null ? "Tất cả" : selectedStatus);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    tableModel.addRow(new Object[]{
-                        rs.getInt("invoice_id"),
-                        rs.getString("invoice_code"),
-                        rs.getInt("stay_id"),
-                        rs.getString("room_number"),
-                        rs.getDouble("room_amount"),
-                        rs.getDouble("service_amount"),
-                        rs.getDouble("discount_amount"),
-                        rs.getDouble("tax_amount"),
-                        rs.getDouble("total_amount"),
-                        rs.getString("status"),
-                        rs.getInt("invoice_id")
-                    });
-                }
-            }
-            try (ResultSet stats = statsPs.executeQuery()) {
-                if (stats.next()) {
-                    invoiceCountLabel.setText(String.valueOf(stats.getInt("invoice_count")));
-                    paidCountLabel.setText(String.valueOf(stats.getInt("paid_count")));
-                    unpaidCountLabel.setText(String.valueOf(stats.getInt("unpaid_count")));
-                    revenueLabel.setText(formatMoney(stats.getDouble("revenue")));
-                }
-            }
-        } catch (SQLException e) {
-            System.err.println("Lỗi lấy invoices: " + e.getMessage());
+        for (Map<String, Object> invoice : invoiceService.searchInvoices(keyword, selectedStatus)) {
+            tableModel.addRow(new Object[]{
+                    invoice.get("invoice_id"), invoice.get("invoice_code"), invoice.get("stay_id"),
+                    invoice.get("room_number"), invoice.get("room_amount"), invoice.get("service_amount"),
+                    invoice.get("discount_amount"), invoice.get("tax_amount"), invoice.get("total_amount"),
+                    invoice.get("status"), invoice.get("invoice_id")
+            });
         }
+
+        Map<String, Object> summary = invoiceService.getInvoiceSummary();
+        invoiceCountLabel.setText(String.valueOf(summary.getOrDefault("invoice_count", 0)));
+        paidCountLabel.setText(String.valueOf(summary.getOrDefault("paid_count", 0)));
+        unpaidCountLabel.setText(String.valueOf(summary.getOrDefault("unpaid_count", 0)));
+        revenueLabel.setText(formatMoney(((Number) summary.getOrDefault("revenue", 0.0)).doubleValue()));
     }
 
     private String formatMoney(double amount) {
@@ -294,42 +255,24 @@ public class PaymentManagerPanel extends JPanel {
     }
 
     private void createInvoiceForStay() {
-        String sql = "SELECT s.stay_id, r.room_number FROM stays s " +
-                     "LEFT JOIN invoices i ON s.stay_id = i.stay_id " +
-                     "JOIN rooms r ON s.room_id = r.room_id " +
-                     "WHERE i.stay_id IS NULL AND s.status = 'CHECKED_IN'";
-        try (Connection conn = DBConnection.getConnection(); 
-             PreparedStatement ps = conn.prepareStatement(sql); 
-             ResultSet rs = ps.executeQuery()) {
-            java.util.List<Item> items = new java.util.ArrayList<>();
-            while (rs.next()) items.add(new Item(rs.getInt(1), rs.getString(2)));
-            if (items.isEmpty()) { 
-                JOptionPane.showMessageDialog(this, "Không có stays cần lập hóa đơn.", "Thông báo", JOptionPane.INFORMATION_MESSAGE); 
-                return; 
-            }
-            Item sel = (Item) JOptionPane.showInputDialog(this, "Chọn stay để lập hóa đơn", "Tạo hóa đơn", JOptionPane.PLAIN_MESSAGE, null, items.toArray(), items.get(0));
-            if (sel != null) {
-                int invoiceId = invoiceService.createInvoiceForStay(sel.id, currentUserId, 0.0);
-                if (invoiceId > 0) { 
-                    JOptionPane.showMessageDialog(this, "Đã tạo hóa đơn ID=" + invoiceId); 
-                    refreshInvoices(); 
-                }
-                else JOptionPane.showMessageDialog(this, "Tạo hóa đơn thất bại", "Lỗi", JOptionPane.ERROR_MESSAGE);
-            }
-        } catch (SQLException e) {
-            System.err.println("Lỗi fetch stays for invoice: " + e.getMessage());
+        List<LookupOption> items = new ArrayList<>();
+        for (Map<String, Object> stay : invoiceService.findStaysWithoutInvoice()) {
+            items.add(new LookupOption((Integer) stay.get("stay_id"), (String) stay.get("room_number")));
         }
-    }
-
-    private static class Item {
-        final int id; 
-        final String label; 
-        Item(int id, String label) { 
-            this.id = id; 
-            this.label = label; 
-        } 
-        @Override public String toString() { 
-            return label + " (ID: " + id + ")"; 
+        if (items.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Không có stays cần lập hóa đơn.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        LookupOption selected = (LookupOption) JOptionPane.showInputDialog(this, "Chọn stay để lập hóa đơn", "Tạo hóa đơn",
+                JOptionPane.PLAIN_MESSAGE, null, items.toArray(), items.get(0));
+        if (selected != null) {
+            int invoiceId = invoiceService.createInvoiceForStay(selected.getId(), currentUserId, 0.0);
+            if (invoiceId > 0) {
+                JOptionPane.showMessageDialog(this, "Đã tạo hóa đơn ID=" + invoiceId);
+                refreshInvoices();
+            } else {
+                JOptionPane.showMessageDialog(this, "Tạo hóa đơn thất bại", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -389,35 +332,24 @@ public class PaymentManagerPanel extends JPanel {
                     return;
                 }
 
-                // Lấy tổng tiền hóa đơn
-                String invSql = "SELECT total_amount FROM invoices WHERE invoice_id = ?";
-                try (Connection conn = DBConnection.getConnection(); 
-                     PreparedStatement ps = conn.prepareStatement(invSql)) {
-                    ps.setInt(1, invoiceId);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) {
-                            double totalAmount = rs.getDouble("total_amount");
-                            double discountAmount = totalAmount * percentage / 100;
-
-                            // Áp dụng giảm giá
-                            if (invoiceService.applyVoucher(invoiceId, discountAmount)) {
-                                JOptionPane.showMessageDialog(dialog, 
-                                    String.format("Áp dụng thành công!\nGiảm: %.0f%% = %.0f VND", percentage, discountAmount), 
-                                    "Thành công", 
-                                    JOptionPane.INFORMATION_MESSAGE);
-                                refreshInvoices();
-                                dialog.dispose();
-                            } else {
-                                JOptionPane.showMessageDialog(dialog, "Lỗi khi áp dụng giảm giá", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                            }
-                        }
-                    }
+                Map<String, Object> invoice = invoiceService.getInvoiceDetails(invoiceId);
+                if (invoice == null) {
+                    JOptionPane.showMessageDialog(dialog, "Không tìm thấy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                double totalAmount = ((Number) invoice.get("total_amount")).doubleValue();
+                double discountAmount = totalAmount * percentage / 100;
+                if (invoiceService.applyVoucher(invoiceId, discountAmount)) {
+                    JOptionPane.showMessageDialog(dialog,
+                            String.format("Áp dụng thành công!\nGiảm: %.0f%% = %.0f VND", percentage, discountAmount),
+                            "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    refreshInvoices();
+                    dialog.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Lỗi khi áp dụng giảm giá", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 }
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(dialog, "Vui lòng nhập số hợp lệ", "Lỗi", JOptionPane.ERROR_MESSAGE);
-            } catch (SQLException ex) {
-                System.err.println("Lỗi: " + ex.getMessage());
-                JOptionPane.showMessageDialog(dialog, "Lỗi hệ thống: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -432,157 +364,107 @@ public class PaymentManagerPanel extends JPanel {
     }
 
     private void confirmPaymentDialog(int invoiceId) {
-        // Lấy thông tin hóa đơn
-        String sql = "SELECT total_amount, status FROM invoices WHERE invoice_id = ?";
-        try (Connection conn = DBConnection.getConnection(); 
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, invoiceId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    double totalAmount = rs.getDouble("total_amount");
-                    String status = rs.getString("status");
-
-                    if ("PAID".equals(status)) {
-                        JOptionPane.showMessageDialog(this, "Hóa đơn này đã được thanh toán rồi!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-                        return;
-                    }
-
-                    JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Xác nhận thanh toán", true);
-                    dialog.setLayout(new GridLayout(5, 2, 10, 10));
-                    dialog.setSize(400, 220);
-                    dialog.setLocationRelativeTo(this);
-
-                    JLabel totalLabel = new JLabel("Tổng tiền:");
-                    JLabel totalValue = new JLabel(String.format("%.0f VND", totalAmount));
-                    totalValue.setFont(new Font("Segoe UI", Font.BOLD, 14));
-                    totalValue.setForeground(new Color(192, 0, 0));
-
-                    JLabel amountLabel = new JLabel("Nhập tiền thanh toán:");
-                    JTextField amountField = new JTextField(String.format("%.0f", totalAmount));
-
-                    JLabel methodLabel = new JLabel("Phương thức thanh toán:");
-                    String[] methods = {"CASH", "CARD", "BANK_TRANSFER"};
-                    JComboBox<String> methodBox = new JComboBox<>(methods);
-
-                    JButton confirmBtn = new JButton("Xác nhận thanh toán");
-                    JButton cancelBtn = new JButton("Hủy");
-
-                    confirmBtn.addActionListener(e -> {
-                        try {
-                            double amount = Double.parseDouble(amountField.getText());
-                            String method = (String) methodBox.getSelectedItem();
-
-                            if (amount <= 0) {
-                                JOptionPane.showMessageDialog(dialog, "Số tiền phải lớn hơn 0", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                                return;
-                            }
-
-                            if (invoiceService.confirmPayment(invoiceId, amount, method, currentUserId)) {
-                                String message = String.format("Xác nhận thanh toán thành công!\nĐã nhận: %.0f VND\nPhương thức: %s", amount, method);
-                                if (amount < totalAmount) {
-                                    message += String.format("\nCòn thiếu: %.0f VND", totalAmount - amount);
-                                }
-                                JOptionPane.showMessageDialog(dialog, message, "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                                refreshInvoices();
-                                dialog.dispose();
-                            } else {
-                                JOptionPane.showMessageDialog(dialog, "Lỗi khi xác nhận thanh toán", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                            }
-                        } catch (NumberFormatException ex) {
-                            JOptionPane.showMessageDialog(dialog, "Số tiền không hợp lệ", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        }
-                    });
-
-                    cancelBtn.addActionListener(e -> dialog.dispose());
-
-                    dialog.add(totalLabel);
-                    dialog.add(totalValue);
-                    dialog.add(amountLabel);
-                    dialog.add(amountField);
-                    dialog.add(methodLabel);
-                    dialog.add(methodBox);
-                    dialog.add(confirmBtn);
-                    dialog.add(cancelBtn);
-
-                    dialog.setVisible(true);
-                }
-            }
-        } catch (SQLException e) {
-            System.err.println("Lỗi lấy thông tin hóa đơn: " + e.getMessage());
+        Map<String, Object> invoice = invoiceService.getInvoiceDetails(invoiceId);
+        if (invoice == null) return;
+        double totalAmount = ((Number) invoice.get("total_amount")).doubleValue();
+        String status = (String) invoice.get("status");
+        if ("PAID".equals(status)) {
+            JOptionPane.showMessageDialog(this, "Hóa đơn này đã được thanh toán rồi!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
         }
+
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Xác nhận thanh toán", true);
+        dialog.setLayout(new GridLayout(5, 2, 10, 10));
+        dialog.setSize(400, 220);
+        dialog.setLocationRelativeTo(this);
+        JLabel totalLabel = new JLabel("Tổng tiền:");
+        JLabel totalValue = new JLabel(String.format("%.0f VND", totalAmount));
+        totalValue.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        totalValue.setForeground(new Color(192, 0, 0));
+        JLabel amountLabel = new JLabel("Nhập tiền thanh toán:");
+        JTextField amountField = new JTextField(String.format("%.0f", totalAmount));
+        JLabel methodLabel = new JLabel("Phương thức thanh toán:");
+        JComboBox<String> methodBox = new JComboBox<>(new String[]{"CASH", "CARD", "BANK_TRANSFER"});
+        JButton confirmBtn = new JButton("Xác nhận thanh toán");
+        JButton cancelBtn = new JButton("Hủy");
+
+        confirmBtn.addActionListener(e -> {
+            try {
+                double amount = Double.parseDouble(amountField.getText());
+                String method = (String) methodBox.getSelectedItem();
+                if (amount <= 0) {
+                    JOptionPane.showMessageDialog(dialog, "Số tiền phải lớn hơn 0", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (invoiceService.confirmPayment(invoiceId, amount, method, currentUserId)) {
+                    String message = String.format("Xác nhận thanh toán thành công!\nĐã nhận: %.0f VND\nPhương thức: %s", amount, method);
+                    if (amount < totalAmount) message += String.format("\nCòn thiếu: %.0f VND", totalAmount - amount);
+                    JOptionPane.showMessageDialog(dialog, message, "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    refreshInvoices();
+                    dialog.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Lỗi khi xác nhận thanh toán", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Số tiền không hợp lệ", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        dialog.add(totalLabel);
+        dialog.add(totalValue);
+        dialog.add(amountLabel);
+        dialog.add(amountField);
+        dialog.add(methodLabel);
+        dialog.add(methodBox);
+        dialog.add(confirmBtn);
+        dialog.add(cancelBtn);
+        dialog.setVisible(true);
     }
 
     private void cancelInvoiceDialog(int invoiceId) {
-        String sql = "SELECT status, invoice_code FROM invoices WHERE invoice_id = ?";
-        try (Connection conn = DBConnection.getConnection(); 
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, invoiceId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    String status = rs.getString("status");
-                    String invoiceCode = rs.getString("invoice_code");
-                    
-                    if ("PAID".equals(status)) {
-                        JOptionPane.showMessageDialog(this, "Không thể hủy hóa đơn đã thanh toán!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    if ("CANCELLED".equals(status)) {
-                        JOptionPane.showMessageDialog(this, "Hóa đơn này đã được hủy rồi!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-                        return;
-                    }
-
-                    int result = JOptionPane.showConfirmDialog(this, 
-                        "Bạn có chắc chắn muốn hủy hóa đơn " + invoiceCode + " không?\nHành động này không thể hoàn tác!", 
-                        "Xác nhận hủy hóa đơn", 
-                        JOptionPane.YES_NO_OPTION, 
-                        JOptionPane.WARNING_MESSAGE);
-
-                    if (result == JOptionPane.YES_OPTION) {
-                        if (invoiceService.cancelInvoice(invoiceId)) {
-                            JOptionPane.showMessageDialog(this, "Đã hủy hóa đơn " + invoiceCode + " thành công", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                            refreshInvoices();
-                        } else {
-                            JOptionPane.showMessageDialog(this, "Lỗi khi hủy hóa đơn", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-                }
+        Map<String, Object> invoice = invoiceService.getInvoiceDetails(invoiceId);
+        if (invoice == null) return;
+        String status = (String) invoice.get("status");
+        String invoiceCode = (String) invoice.get("invoice_code");
+        if ("PAID".equals(status)) {
+            JOptionPane.showMessageDialog(this, "Không thể hủy hóa đơn đã thanh toán!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if ("CANCELLED".equals(status)) {
+            JOptionPane.showMessageDialog(this, "Hóa đơn này đã được hủy rồi!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int result = JOptionPane.showConfirmDialog(this,
+                "Bạn có chắc chắn muốn hủy hóa đơn " + invoiceCode + " không?\nHành động này không thể hoàn tác!",
+                "Xác nhận hủy hóa đơn", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (result == JOptionPane.YES_OPTION) {
+            if (invoiceService.cancelInvoice(invoiceId)) {
+                JOptionPane.showMessageDialog(this, "Đã hủy hóa đơn " + invoiceCode + " thành công", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                refreshInvoices();
+            } else {
+                JOptionPane.showMessageDialog(this, "Lỗi khi hủy hóa đơn", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
-        } catch (SQLException e) {
-            System.err.println("Lỗi kiểm tra trạng thái hóa đơn: " + e.getMessage());
         }
     }
 
     private void showInvoicePreview(int invoiceId) {
+        Map<String, Object> invoice = invoiceService.getInvoicePreviewDetails(invoiceId);
+        if (invoice == null) {
+            JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         List<String[]> serviceLines = new ArrayList<>();
-        String sql = "SELECT i.invoice_code, i.room_amount, i.service_amount, i.discount_amount, i.tax_amount, i.total_amount, " +
-                     "i.status, i.issued_at, g.full_name AS guest_name, r.room_number " +
-                     "FROM invoices i " +
-                     "JOIN stays s ON i.stay_id = s.stay_id " +
-                     "JOIN reservations res ON s.reservation_id = res.reservation_id " +
-                     "JOIN guests g ON res.guest_id = g.guest_id " +
-                     "JOIN rooms r ON s.room_id = r.room_id " +
-                     "WHERE i.invoice_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement servicePs = conn.prepareStatement(
-                     "SELECT description, quantity, unit_price, amount FROM invoice_details " +
-                         "WHERE invoice_id = ? AND item_type = 'SERVICE' ORDER BY invoice_detail_id")) {
-            servicePs.setInt(1, invoiceId);
-            try (ResultSet serviceRs = servicePs.executeQuery()) {
-                while (serviceRs.next()) {
-                    serviceLines.add(new String[]{
-                            serviceRs.getString("description"),
-                            String.valueOf(serviceRs.getInt("quantity")),
-                            String.format("%.0f", serviceRs.getDouble("unit_price")),
-                            String.format("%.0f", serviceRs.getDouble("amount"))
-                    });
-                }
+        for (Map<String, Object> line : invoiceService.getInvoiceLineItems(invoiceId)) {
+            if ("SERVICE".equals(line.get("item_type"))) {
+                serviceLines.add(new String[]{
+                        String.valueOf(line.get("description")),
+                        String.valueOf(line.get("quantity")),
+                        String.format("%.0f", ((Number) line.get("unit_price")).doubleValue()),
+                        String.format("%.0f", ((Number) line.get("amount")).doubleValue())
+                });
             }
+        }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, invoiceId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
                     StringBuilder html = new StringBuilder();
                     html.append("<html><head><meta charset='UTF-8'></head>");
                     html.append("<body style='font-family: Arial; margin: 0; padding: 10px;'>");
@@ -598,12 +480,12 @@ public class PaymentManagerPanel extends JPanel {
                     // Invoice Info
                     html.append("<table style='width: 100%; font-size: 13px; border-collapse: collapse;'>");
                     html.append("<tr>");
-                    html.append("<td style='width: 50%;'><strong>Mã HĐ:</strong> ").append(rs.getString("invoice_code")).append("</td>");
-                    html.append("<td style='width: 50%; text-align: right;'><strong>Ngày:</strong> ").append(rs.getTimestamp("issued_at")).append("</td>");
+                    html.append("<td style='width: 50%;'><strong>Mã HĐ:</strong> ").append(invoice.get("invoice_code")).append("</td>");
+                    html.append("<td style='width: 50%; text-align: right;'><strong>Ngày:</strong> ").append(invoice.get("issued_at")).append("</td>");
                     html.append("</tr>");
                     html.append("<tr>");
-                    html.append("<td><strong>Khách hàng:</strong> ").append(rs.getString("guest_name")).append("</td>");
-                    html.append("<td style='text-align: right;'><strong>Phòng:</strong> ").append(rs.getString("room_number")).append("</td>");
+                    html.append("<td><strong>Khách hàng:</strong> ").append(invoice.get("guest_name")).append("</td>");
+                    html.append("<td style='text-align: right;'><strong>Phòng:</strong> ").append(invoice.get("room_number")).append("</td>");
                     html.append("</tr>");
                     html.append("</table>");
                     html.append("<hr style='border: none; border-top: 1px dashed #999; margin: 10px 0;'>");
@@ -617,8 +499,8 @@ public class PaymentManagerPanel extends JPanel {
                     html.append("<th style='text-align: right; padding: 3px 0; width: 80px;'>Số tiền</th>");
                     html.append("</tr>");
                     
-                    double roomAmount = rs.getDouble("room_amount");
-                    double serviceAmount = rs.getDouble("service_amount");
+                    double roomAmount = ((Number) invoice.get("room_amount")).doubleValue();
+                    double serviceAmount = ((Number) invoice.get("service_amount")).doubleValue();
                     
                     html.append("<tr>");
                     html.append("<td style='padding: 3px 0;'>Tiền phòng</td>");
@@ -643,7 +525,7 @@ public class PaymentManagerPanel extends JPanel {
                         }
                     }
                     
-                    double discountAmount = rs.getDouble("discount_amount");
+                    double discountAmount = ((Number) invoice.get("discount_amount")).doubleValue();
                     if (discountAmount > 0) {
                         html.append("<tr style='color: green;'>");
                         html.append("<td style='padding: 3px 0;'>Giảm giá</td>");
@@ -651,7 +533,7 @@ public class PaymentManagerPanel extends JPanel {
                         html.append("</tr>");
                     }
                     
-                    double taxAmount = rs.getDouble("tax_amount");
+                    double taxAmount = ((Number) invoice.get("tax_amount")).doubleValue();
                     if (taxAmount > 0) {
                         html.append("<tr>");
                         html.append("<td style='padding: 3px 0;'>Thuế VAT (10%)</td>");
@@ -663,7 +545,7 @@ public class PaymentManagerPanel extends JPanel {
                     html.append("<hr style='border: none; border-top: 2px solid #333; margin: 10px 0;'>");
                     
                     // Total
-                    double totalAmount = rs.getDouble("total_amount");
+                    double totalAmount = ((Number) invoice.get("total_amount")).doubleValue();
                     html.append("<table style='width: 100%; font-size: 14px; font-weight: bold; border-collapse: collapse;'>");
                     html.append("<tr>");
                     html.append("<td style='padding: 5px 0;'>TỔNG CỘNG:</td>");
@@ -673,7 +555,7 @@ public class PaymentManagerPanel extends JPanel {
                     html.append("<hr style='border: none; border-top: 1px dashed #999; margin: 10px 0;'>");
                     
                     // Status
-                    String status = rs.getString("status");
+                    String status = (String) invoice.get("status");
                     String statusText;
                     String statusColor;
                     if ("PAID".equals(status)) {
@@ -710,13 +592,6 @@ public class PaymentManagerPanel extends JPanel {
                     JScrollPane scroll = new JScrollPane(pane);
                     scroll.setPreferredSize(new Dimension(600, 500));
                     
-                    JOptionPane.showMessageDialog(this, scroll, "HÓA ĐƠN - " + rs.getString("invoice_code"), JOptionPane.INFORMATION_MESSAGE);
-                }
-            }
-            }
-        } catch (SQLException e) {
-            System.err.println("Lỗi khi tạo preview: " + e.getMessage());
-            JOptionPane.showMessageDialog(this, "Lỗi khi tải hóa đơn: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
-        }
+                    JOptionPane.showMessageDialog(this, scroll, "HÓA ĐƠN - " + invoice.get("invoice_code"), JOptionPane.INFORMATION_MESSAGE);
     }
 }

@@ -2,9 +2,11 @@ package com.cnj42.hotel.service;
 
 import com.cnj42.hotel.dao.DashboardDAO;
 import com.cnj42.hotel.model.DashboardData;
+import com.cnj42.hotel.model.Reservation;
 import com.cnj42.hotel.model.User;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public class DashboardService {
 
@@ -35,6 +37,15 @@ public class DashboardService {
             auditLogService.logEvent("DASHBOARD_VIEW_FAILED", "DASHBOARD", "DASHBOARD", null, actor,
                     "Failed to load dashboard: " + e.getMessage(), "127.0.0.1", "FAILED");
             return new DashboardData();
+        }
+    }
+
+    public List<Reservation> getRecentReservations() {
+        try {
+            return dashboardDAO.getRecentReservations();
+        } catch (SQLException e) {
+            System.err.println("Lỗi khi tải đặt phòng gần đây: " + e.getMessage());
+            return List.of();
         }
     }
 }

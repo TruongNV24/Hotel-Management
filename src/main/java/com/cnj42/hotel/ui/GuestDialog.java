@@ -1,19 +1,15 @@
 package com.cnj42.hotel.ui;
 
-import com.cnj42.hotel.utils.DBConnection;
-import com.cnj42.hotel.service.AuditLogService;
+import com.cnj42.hotel.model.Guest;
+import com.cnj42.hotel.service.GuestService;
 
 import javax.swing.*;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 
 public class GuestDialog extends JDialog {
     private boolean saved = false;
     private int createdId = -1;
-    private final AuditLogService auditLogService = new AuditLogService();
+    private final GuestService guestService = new GuestService();
 
     private JTextField nameField;
     private JTextField phoneField;
@@ -49,22 +45,16 @@ public class GuestDialog extends JDialog {
         String phone = phoneField.getText().trim();
         String idCard = idCardField.getText().trim();
         if (name.isEmpty() || phone.isEmpty() || idCard.isEmpty()) { JOptionPane.showMessageDialog(this, "Vui lòng nhập đủ thông tin"); return; }
-        String sql = "INSERT INTO guests (full_name, phone, id_card) VALUES (?, ?, ?)";
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, name);
-            ps.setString(2, phone);
-            ps.setString(3, idCard);
-            ps.executeUpdate();
-            try (ResultSet gk = ps.getGeneratedKeys()) { if (gk.next()) createdId = gk.getInt(1); }
-            saved = createdId > 0;
-                auditLogService.logEvent(saved ? "GUEST_CREATED" : "GUEST_CREATE_FAILED", "GUEST", "GUEST",
-                    saved ? createdId : null, null, (saved ? "Created" : "Failed to create") + " guest " + name,
-                    "127.0.0.1", saved ? "SUCCESS" : "FAILED");
+        Guest guest = new Guest();
+        guest.setFullName(name);
+        guest.setPhone(phone);
+        guest.setIdCard(idCard);
+        createdId = guestService.create(guest, null);
+        saved = createdId > 0;
+        if (saved) {
             dispose();
-        } catch (SQLException e) {
-                auditLogService.logEvent("GUEST_CREATE_FAILED", "GUEST", "GUEST", null, null,
-                    "Exception creating guest " + name + ": " + e.getMessage(), "127.0.0.1", "FAILED");
-            JOptionPane.showMessageDialog(this, "Lỗi lưu khách: " + e.getMessage());
+        } else {
+            JOptionPane.showMessageDialog(this, "Lỗi lưu khách.");
         }
     }
 

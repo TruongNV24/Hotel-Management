@@ -1,17 +1,14 @@
 package com.cnj42.hotel.ui;
 
-import com.cnj42.hotel.service.AuditLogService;
+import com.cnj42.hotel.model.Guest;
 import com.cnj42.hotel.model.User;
-import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.service.GuestService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.List;
 
 public class GuestManagementPanel extends JPanel {
 
@@ -22,7 +19,7 @@ public class GuestManagementPanel extends JPanel {
     private static final Color BORDER = new Color(225, 233, 235);
 
     private final User currentUser;
-    private final AuditLogService auditLogService = new AuditLogService();
+    private final GuestService guestService = new GuestService();
     private final JTextField searchField = new JTextField();
     private final DefaultTableModel tableModel;
     private final JTable table;
@@ -159,33 +156,19 @@ public class GuestManagementPanel extends JPanel {
 
     private void loadGuests() {
         tableModel.setRowCount(0);
-        String keyword = searchField.getText().trim();
-        String sql = "SELECT guest_id, full_name, phone, email, id_card, nationality, created_at "
-                + "FROM guests WHERE full_name LIKE ? OR phone LIKE ? OR id_card LIKE ? "
-                + "ORDER BY created_at DESC";
-        String query = "%" + keyword + "%";
-        try (Connection connection = DBConnection.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, query);
-            statement.setString(2, query);
-            statement.setString(3, query);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    tableModel.addRow(new Object[]{
-                            resultSet.getInt("guest_id"),
-                            resultSet.getString("full_name"),
-                            resultSet.getString("phone"),
-                            valueOrDash(resultSet.getString("email")),
-                            resultSet.getString("id_card"),
-                            valueOrDash(resultSet.getString("nationality")),
-                            resultSet.getTimestamp("created_at")
-                    });
-                }
-            }
-            totalLabel.setText(String.valueOf(tableModel.getRowCount()));
-        } catch (SQLException exception) {
-            showError("Không thể tải danh sách khách hàng: " + exception.getMessage());
+        List<Guest> guests = guestService.search(searchField.getText().trim());
+        for (Guest guest : guests) {
+            tableModel.addRow(new Object[]{
+                    guest.getGuestId(),
+                    guest.getFullName(),
+                    guest.getPhone(),
+                    valueOrDash(guest.getEmail()),
+                    guest.getIdCard(),
+                    valueOrDash(guest.getNationality()),
+                    guest.getCreatedAt()
+            });
         }
+        totalLabel.setText(String.valueOf(tableModel.getRowCount()));
     }
 
     private void openGuestEditor(Integer guestId) {
@@ -197,23 +180,17 @@ public class GuestManagementPanel extends JPanel {
         JTextField nationalityField = new JTextField("Vietnam");
 
         if (guestId != null) {
-            String sql = "SELECT full_name, phone, id_card, email, address, nationality FROM guests WHERE guest_id = ?";
-            try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setInt(1, guestId);
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    if (resultSet.next()) {
-                        nameField.setText(resultSet.getString("full_name"));
-                        phoneField.setText(resultSet.getString("phone"));
-                        idCardField.setText(resultSet.getString("id_card"));
-                        emailField.setText(valueOrEmpty(resultSet.getString("email")));
-                        addressField.setText(valueOrEmpty(resultSet.getString("address")));
-                        nationalityField.setText(valueOrEmpty(resultSet.getString("nationality")));
-                    }
-                }
-            } catch (SQLException exception) {
-                showError("Không thể tải thông tin khách hàng: " + exception.getMessage());
+            Guest guest = guestService.findById(guestId);
+            if (guest == null) {
+                showError("Không thể tải thông tin khách hàng.");
                 return;
             }
+            nameField.setText(valueOrEmpty(guest.getFullName()));
+            phoneField.setText(valueOrEmpty(guest.getPhone()));
+            idCardField.setText(valueOrEmpty(guest.getIdCard()));
+            emailField.setText(valueOrEmpty(guest.getEmail()));
+            addressField.setText(valueOrEmpty(guest.getAddress()));
+            nationalityField.setText(valueOrEmpty(guest.getNationality()));
         }
 
         JPanel form = new JPanel(new GridBagLayout());
@@ -244,47 +221,32 @@ public class GuestManagementPanel extends JPanel {
     }
 
     private boolean insertGuest(JTextField name, JTextField phone, JTextField idCard, JTextField email, JTextField address, JTextField nationality) {
-        String sql = "INSERT INTO guests (full_name, phone, id_card, email, address, nationality) VALUES (?, ?, ?, ?, ?, ?)";
-        try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
-            fillGuestStatement(statement, name, phone, idCard, email, address, nationality);
-            statement.executeUpdate();
-            int id = -1;
-            try (ResultSet keys = statement.getGeneratedKeys()) { if (keys.next()) id = keys.getInt(1); }
-            auditLogService.logEvent("GUEST_CREATED", "GUEST", "GUEST", id > 0 ? id : null, currentUser,
-                    "Created guest " + name.getText().trim(), "127.0.0.1", "SUCCESS");
-            return true;
-        } catch (SQLException exception) {
-            auditLogService.logEvent("GUEST_CREATE_FAILED", "GUEST", "GUEST", null, currentUser,
-                    "Failed to create guest: " + exception.getMessage(), "127.0.0.1", "FAILED");
-            showError("Không thể thêm khách hàng: " + exception.getMessage());
-            return false;
+        int guestId = guestService.create(buildGuest(name, phone, idCard, email, address, nationality), currentUser);
+        if (guestId <= 0) {
+            showError("Không thể thêm khách hàng.");
         }
+        return guestId > 0;
     }
 
     private boolean updateGuest(int guestId, JTextField name, JTextField phone, JTextField idCard, JTextField email, JTextField address, JTextField nationality) {
-        String sql = "UPDATE guests SET full_name = ?, phone = ?, id_card = ?, email = ?, address = ?, nationality = ? WHERE guest_id = ?";
-        try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
-            fillGuestStatement(statement, name, phone, idCard, email, address, nationality);
-            statement.setInt(7, guestId);
-            statement.executeUpdate();
-            auditLogService.logEvent("GUEST_UPDATED", "GUEST", "GUEST", guestId, currentUser,
-                    "Updated guest " + name.getText().trim(), "127.0.0.1", "SUCCESS");
-            return true;
-        } catch (SQLException exception) {
-            auditLogService.logEvent("GUEST_UPDATE_FAILED", "GUEST", "GUEST", guestId, currentUser,
-                    "Failed to update guest: " + exception.getMessage(), "127.0.0.1", "FAILED");
-            showError("Không thể cập nhật khách hàng: " + exception.getMessage());
-            return false;
+        Guest guest = buildGuest(name, phone, idCard, email, address, nationality);
+        guest.setGuestId(guestId);
+        boolean updated = guestService.update(guest, currentUser);
+        if (!updated) {
+            showError("Không thể cập nhật khách hàng.");
         }
+        return updated;
     }
 
-    private void fillGuestStatement(PreparedStatement statement, JTextField name, JTextField phone, JTextField idCard, JTextField email, JTextField address, JTextField nationality) throws SQLException {
-        statement.setString(1, name.getText().trim());
-        statement.setString(2, phone.getText().trim());
-        statement.setString(3, idCard.getText().trim());
-        statement.setString(4, emptyToNull(email.getText()));
-        statement.setString(5, emptyToNull(address.getText()));
-        statement.setString(6, emptyToNull(nationality.getText()));
+    private Guest buildGuest(JTextField name, JTextField phone, JTextField idCard, JTextField email, JTextField address, JTextField nationality) {
+        Guest guest = new Guest();
+        guest.setFullName(name.getText().trim());
+        guest.setPhone(phone.getText().trim());
+        guest.setIdCard(idCard.getText().trim());
+        guest.setEmail(emptyToNull(email.getText()));
+        guest.setAddress(emptyToNull(address.getText()));
+        guest.setNationality(emptyToNull(nationality.getText()));
+        return guest;
     }
 
     private void editSelected() {
@@ -297,13 +259,9 @@ public class GuestManagementPanel extends JPanel {
         if (id == null) return;
         int result = JOptionPane.showConfirmDialog(this, "Xóa khách hàng này?", "Xác nhận", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (result != JOptionPane.YES_OPTION) return;
-        try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement("DELETE FROM guests WHERE guest_id = ?")) {
-            statement.setInt(1, id);
-            statement.executeUpdate();
-            auditLogService.logEvent("GUEST_DELETED", "GUEST", "GUEST", id, currentUser,
-                    "Deleted guest " + id, "127.0.0.1", "SUCCESS");
+        if (guestService.delete(id, currentUser)) {
             loadGuests();
-        } catch (SQLException exception) {
+        } else {
             showError("Không thể xóa khách hàng. Có thể khách đã có đặt phòng hoặc lưu trú.");
         }
     }

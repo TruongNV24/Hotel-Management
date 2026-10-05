@@ -1,20 +1,19 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.service.ReservationService;
-import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.model.Guest;
+import com.cnj42.hotel.model.Room;
+import com.cnj42.hotel.service.GuestService;
+import com.cnj42.hotel.service.RoomService;
 
 import javax.swing.*;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class ReservationDialog extends JDialog {
 
     private final ReservationService reservationService = new ReservationService();
+    private final GuestService guestService = new GuestService();
+    private final RoomService roomService = new RoomService();
     private Integer reservationId;
     private Integer createdBy;
 
@@ -88,15 +87,15 @@ public class ReservationDialog extends JDialog {
     }
 
     private void loadGuests() {
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement("SELECT guest_id, full_name FROM guests ORDER BY full_name"); ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) guestBox.addItem(new Item(rs.getInt(1), rs.getString(2)));
-        } catch (SQLException e) { System.err.println("Lỗi load guests: " + e.getMessage()); }
+        for (Guest guest : guestService.findAll()) {
+            guestBox.addItem(new Item(guest.getGuestId(), guest.getFullName()));
+        }
     }
 
     private void loadRooms() {
-        try (Connection conn = DBConnection.getConnection(); PreparedStatement ps = conn.prepareStatement("SELECT room_id, room_number FROM rooms WHERE status = 'AVAILABLE' ORDER BY room_number"); ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) roomBox.addItem(new Item(rs.getInt(1), rs.getString(2)));
-        } catch (SQLException e) { System.err.println("Lỗi load rooms: " + e.getMessage()); }
+        for (Room room : roomService.getAvailableRooms()) {
+            roomBox.addItem(new Item(room.getRoomId(), room.getRoomNumber()));
+        }
     }
 
     private void loadReservation() {

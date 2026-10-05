@@ -64,6 +64,44 @@ public class StayService {
         }
     }
 
+    public Integer findInvoiceIdByStay(int stayId) {
+        try {
+            return stayDAO.findInvoiceIdByStay(stayId);
+        } catch (SQLException e) {
+            System.err.println("Lỗi tìm hóa đơn lưu trú: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public CheckoutSummary getCurrentCheckoutSummary(int stayId, int roomId) {
+        try {
+            return stayDAO.getCurrentCheckoutSummary(stayId, roomId);
+        } catch (SQLException e) {
+            System.err.println("Lỗi tính toán checkout: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public int checkoutAndPay(int stayId, int reservationId, int roomId, String roomNumber,
+            CheckoutSummary summary, double discountAmount, String paymentMethod, Integer currentUserId) {
+        try {
+            int invoiceId = stayDAO.checkoutAndPay(stayId, reservationId, roomId, roomNumber,
+                    summary, discountAmount, paymentMethod, currentUserId);
+            if (invoiceId > 0) {
+                auditLogService.logEvent("STAY_CHECKOUT_SUCCESS", "STAY", "STAY", reservationId, null,
+                        "Checked out stay " + stayId + " and created invoice " + invoiceId,
+                        "127.0.0.1", "SUCCESS");
+            }
+            return invoiceId;
+        } catch (SQLException e) {
+            System.err.println("Lỗi checkout lưu trú: " + e.getMessage());
+            auditLogService.logEvent("STAY_CHECKOUT_FAILED", "STAY", "STAY", reservationId, null,
+                    "Exception during checkout for stay " + stayId + ": " + e.getMessage(),
+                    "127.0.0.1", "FAILED");
+            return -1;
+        }
+    }
+
     public boolean checkoutAndCreateInvoice(int stayId, int reservationId, int roomId, String paymentMethod, Integer currentUserId) {
         try {
             boolean ok = stayDAO.checkoutAndCreateInvoice(stayId, reservationId, roomId, paymentMethod, currentUserId);

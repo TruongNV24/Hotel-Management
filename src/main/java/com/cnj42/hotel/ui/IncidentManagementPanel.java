@@ -1,19 +1,16 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.Incident;
+import com.cnj42.hotel.model.LookupOption;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.IncidentService;
 import com.cnj42.hotel.service.PermissionService;
-import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.service.ReferenceDataService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +26,7 @@ public class IncidentManagementPanel extends JPanel {
     private static final Color GREEN = new Color(45, 160, 108);
     private final User currentUser;
     private final IncidentService incidentService = new IncidentService();
+    private final ReferenceDataService referenceDataService = new ReferenceDataService();
     private final JTextField searchField = new JTextField(18);
     private final JComboBox<String> typeFilter = new JComboBox<>(new String[]{"ALL", Incident.PAYMENT, Incident.NO_CHECKOUT, Incident.PROPERTY_DAMAGE, Incident.GUEST_COMPLAINT, Incident.BILLING_DISPUTE, Incident.SERVICE_ISSUE, Incident.OTHER});
     private final JComboBox<String> priorityFilter = new JComboBox<>(new String[]{"ALL", Incident.LOW, Incident.MEDIUM, Incident.HIGH, Incident.CRITICAL});
@@ -240,13 +238,10 @@ public class IncidentManagementPanel extends JPanel {
         JComboBox<String> typeBox = new JComboBox<>(new String[]{Incident.PAYMENT, Incident.NO_CHECKOUT, Incident.PROPERTY_DAMAGE, Incident.GUEST_COMPLAINT, Incident.BILLING_DISPUTE, Incident.SERVICE_ISSUE, Incident.OTHER});
         JComboBox<String> priorityBox = new JComboBox<>(new String[]{Incident.LOW, Incident.MEDIUM, Incident.HIGH, Incident.CRITICAL});
         JComboBox<String> statusBox = new JComboBox<>(new String[]{Incident.OPEN, Incident.IN_PROGRESS, Incident.RESOLVED, Incident.CLOSED, Incident.CANCELLED});
-        JComboBox<ReferenceOption> guestBox = createReferenceBox("SELECT guest_id, CONCAT(full_name, ' - ', phone) FROM guests ORDER BY full_name");
-        JComboBox<ReferenceOption> reservationBox = createReferenceBox("SELECT r.reservation_id, CONCAT(r.reservation_code, ' - phòng ', rm.room_number, ' - ', g.full_name) "
-            + "FROM reservations r JOIN guests g ON g.guest_id = r.guest_id JOIN rooms rm ON rm.room_id = r.room_id ORDER BY r.created_at DESC");
-        JComboBox<ReferenceOption> stayBox = createReferenceBox("SELECT s.stay_id, CONCAT('Lưu trú #', s.stay_id, ' - phòng ', rm.room_number, ' - ', g.full_name) "
-            + "FROM stays s JOIN reservations r ON r.reservation_id = s.reservation_id JOIN guests g ON g.guest_id = r.guest_id JOIN rooms rm ON rm.room_id = s.room_id ORDER BY s.stay_id DESC");
-        JComboBox<ReferenceOption> invoiceBox = createReferenceBox("SELECT i.invoice_id, CONCAT(i.invoice_code, ' - ', i.status, ' - ', g.full_name) "
-            + "FROM invoices i JOIN stays s ON s.stay_id = i.stay_id JOIN reservations r ON r.reservation_id = s.reservation_id JOIN guests g ON g.guest_id = r.guest_id ORDER BY i.issued_at DESC");
+        JComboBox<ReferenceOption> guestBox = createReferenceBox("GUEST");
+        JComboBox<ReferenceOption> reservationBox = createReferenceBox("RESERVATION");
+        JComboBox<ReferenceOption> stayBox = createReferenceBox("STAY");
+        JComboBox<ReferenceOption> invoiceBox = createReferenceBox("INVOICE");
         JTextField titleField = new JTextField(existing == null ? "" : existing.getTitle());
         JTextArea descriptionArea = new JTextArea(existing == null ? "" : nullToEmpty(existing.getDescription()), 4, 28);
         JTextArea resolutionArea = new JTextArea(existing == null ? "" : nullToEmpty(existing.getResolution()), 4, 28);
@@ -277,9 +272,7 @@ public class IncidentManagementPanel extends JPanel {
 
     private void assignSelected() {
         Incident incident = selectedIncident(); if (incident == null) return;
-        JComboBox<ReferenceOption> assigneeBox = createReferenceBox(
-            "SELECT user_id, CONCAT(full_name, ' (', username, ')') FROM users "
-                + "WHERE status = 'ACTIVE' ORDER BY full_name");
+        JComboBox<ReferenceOption> assigneeBox = createReferenceBox("ACTIVE_USER");
         selectReference(assigneeBox, incident.getAssignedTo());
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.add(new JLabel("Nhân viên xử lý:"), BorderLayout.NORTH);
@@ -305,17 +298,11 @@ public class IncidentManagementPanel extends JPanel {
         loadIncidents();
     }
 
-    private JComboBox<ReferenceOption> createReferenceBox(String sql) {
+    private JComboBox<ReferenceOption> createReferenceBox(String type) {
         JComboBox<ReferenceOption> box = new JComboBox<>();
         box.addItem(new ReferenceOption(null, "Không liên kết"));
-        try (Connection connection = DBConnection.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                box.addItem(new ReferenceOption(resultSet.getInt(1), resultSet.getString(2)));
-            }
-        } catch (SQLException exception) {
-            System.err.println("Không thể tải danh sách liên kết sự cố: " + exception.getMessage());
+        for (LookupOption option : referenceDataService.findOptions(type)) {
+            box.addItem(new ReferenceOption(option.getId(), option.getLabel()));
         }
         box.setPreferredSize(new Dimension(280, 28));
         return box;

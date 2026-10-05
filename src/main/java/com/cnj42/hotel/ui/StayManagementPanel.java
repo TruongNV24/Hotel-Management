@@ -3,12 +3,12 @@ package com.cnj42.hotel.ui;
 import com.cnj42.hotel.model.CheckoutSummary;
 import com.cnj42.hotel.model.Service;
 import com.cnj42.hotel.model.ServiceUsage;
+import com.cnj42.hotel.model.Stay;
 import com.cnj42.hotel.model.StayDetail;
 import com.cnj42.hotel.service.ReservationService;
 import com.cnj42.hotel.service.ServiceService;
 import com.cnj42.hotel.service.ServiceUsageService;
 import com.cnj42.hotel.service.StayService;
-import com.cnj42.hotel.utils.DBConnection;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -20,7 +20,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
-import java.sql.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -418,18 +417,13 @@ public class StayManagementPanel extends JPanel {
             return;
         }
 
-        String sql = "SELECT invoice_id FROM invoices WHERE stay_id = ? ORDER BY invoice_id DESC LIMIT 1";
-        try (Connection connection = DBConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setInt(1, stayRow.getStayId());
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    checkoutComplete.accept(resultSet.getInt("invoice_id"));
-                    return;
-                }
-            }
+        Integer invoiceId = stayService.findInvoiceIdByStay(stayRow.getStayId());
+        if (invoiceId != null) {
+            checkoutComplete.accept(invoiceId);
+            return;
+        }
+        if (invoiceId == null) {
             JOptionPane.showMessageDialog(this, "Chưa tìm thấy hóa đơn cho lượt lưu trú này.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-        } catch (SQLException exception) {
-            JOptionPane.showMessageDialog(this, "Không thể mở hóa đơn: " + exception.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -439,141 +433,60 @@ public class StayManagementPanel extends JPanel {
     }
 
     private void loadStats() {
-        String sql = "SELECT " +
-                "SUM(CASE WHEN s.stay_id IS NULL AND res.status IN ('PENDING','CONFIRMED') THEN 1 ELSE 0 END) AS waiting_checkin, " +
-                "SUM(CASE WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL THEN 1 ELSE 0 END) AS in_house, " +
-                "SUM(CASE WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL AND res.check_out_date <= CURDATE() THEN 1 ELSE 0 END) AS waiting_checkout, " +
-                "SUM(CASE WHEN s.status = 'CHECKED_OUT' OR res.status = 'COMPLETED' THEN 1 ELSE 0 END) AS checked_out " +
-                "FROM reservations res " +
-                "LEFT JOIN stays s ON s.reservation_id = res.reservation_id";
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            if (rs.next()) {
-                waitingCheckinCount.setText(String.valueOf(nvl(rs.getInt("waiting_checkin"))));
-                inHouseCount.setText(String.valueOf(nvl(rs.getInt("in_house"))));
-                waitingCheckoutCount.setText(String.valueOf(nvl(rs.getInt("waiting_checkout"))));
-                checkedOutCount.setText(String.valueOf(nvl(rs.getInt("checked_out"))));
-            } else {
-                waitingCheckinCount.setText("0");
-                inHouseCount.setText("0");
-                waitingCheckoutCount.setText("0");
-                checkedOutCount.setText("0");
-            }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Không thể tải thống kê lưu trú: " + ex.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
-            waitingCheckinCount.setText("0");
-            inHouseCount.setText("0");
-            waitingCheckoutCount.setText("0");
-            checkedOutCount.setText("0");
-        }
+        java.util.Map<String, Integer> stats = stayService.getStayStats();
+        waitingCheckinCount.setText(String.valueOf(stats.getOrDefault("waiting_checkin", 0)));
+        inHouseCount.setText(String.valueOf(stats.getOrDefault("in_house", 0)));
+        waitingCheckoutCount.setText(String.valueOf(stats.getOrDefault("waiting_checkout", 0)));
+        checkedOutCount.setText(String.valueOf(stats.getOrDefault("checked_out", 0)));
     }
 
     private void loadStayTable() {
         tableModel.setRowCount(0);
-
-        StringBuilder sql = new StringBuilder(
-                "SELECT res.reservation_id, res.reservation_code, g.full_name AS guest_name, g.phone, " +
-                "r.room_number, r.room_id, res.check_in_date, res.check_out_date, " +
-                "s.stay_id, s.actual_check_in, s.actual_check_out, s.status AS stay_status, res.number_of_guests, " +
-                "CASE " +
-                "WHEN s.stay_id IS NULL AND res.status IN ('PENDING','CONFIRMED') THEN 'WAITING_CHECK_IN' " +
-                "WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL AND res.check_out_date <= CURDATE() THEN 'CHECKOUT_PENDING' " +
-                "WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL THEN 'IN_HOUSE' " +
-                "WHEN s.status = 'CHECKED_OUT' OR res.status = 'COMPLETED' THEN 'CHECKED_OUT' " +
-                "ELSE 'WAITING_CHECK_IN' " +
-                "END AS display_status " +
-                "FROM reservations res " +
-                "LEFT JOIN guests g ON g.guest_id = res.guest_id " +
-                "LEFT JOIN rooms r ON r.room_id = res.room_id " +
-                "LEFT JOIN stays s ON s.reservation_id = res.reservation_id " +
-                "WHERE 1=1 "
-        );
-
-        List<Object> params = new ArrayList<>();
         String keyword = searchField.getText() == null ? "" : searchField.getText().trim();
-        if (!keyword.isEmpty()) {
-            sql.append("AND (g.full_name LIKE ? OR g.phone LIKE ? OR r.room_number LIKE ? OR res.reservation_code LIKE ?) ");
-            String like = "%" + keyword + "%";
-            params.add(like);
-            params.add(like);
-            params.add(like);
-            params.add(like);
-        }
-
-        String statusFilterValue = (String) statusFilterCombo.getSelectedItem();
-        String normalizedStatus = normalizeStatusForQuery(statusFilterValue);
-        if (normalizedStatus != null) {
-            sql.append("AND CASE ");
-            sql.append("WHEN s.stay_id IS NULL AND res.status IN ('PENDING','CONFIRMED') THEN 'WAITING_CHECK_IN' ");
-            sql.append("WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL AND res.check_out_date <= CURDATE() THEN 'CHECKOUT_PENDING' ");
-            sql.append("WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL THEN 'IN_HOUSE' ");
-            sql.append("WHEN s.status = 'CHECKED_OUT' OR res.status = 'COMPLETED' THEN 'CHECKED_OUT' ");
-            sql.append("ELSE 'WAITING_CHECK_IN' END = ? ");
-            params.add(normalizedStatus);
-        }
-
         String fromText = fromDateField.getText() == null ? "" : fromDateField.getText().trim();
         String toText = toDateField.getText() == null ? "" : toDateField.getText().trim();
-        if (!fromText.isEmpty()) {
-            sql.append("AND DATE(COALESCE(s.actual_check_in, res.check_in_date)) >= ? ");
-            params.add(parseDate(fromText).toString());
-        }
-        if (!toText.isEmpty()) {
-            sql.append("AND DATE(COALESCE(s.actual_check_in, res.check_in_date)) <= ? ");
-            params.add(parseDate(toText).toString());
-        }
+        LocalDate fromDate = fromText.isEmpty() ? null : parseDate(fromText);
+        LocalDate toDate = toText.isEmpty() ? null : parseDate(toText);
+        List<Stay> stays = stayService.searchStays(
+                keyword,
+                normalizeStatusForQuery((String) statusFilterCombo.getSelectedItem()),
+                fromDate,
+                toDate
+        );
 
-        sql.append("ORDER BY COALESCE(s.actual_check_in, res.check_in_date) DESC, res.reservation_id DESC");
+        int rowIndex = 1;
+        for (Stay stay : stays) {
+            StayRow stayRow = new StayRow();
+            stayRow.setReservationId(stay.getReservationId());
+            stayRow.setReservationCode(stay.getReservationCode());
+            stayRow.setGuestName(stay.getGuestName());
+            stayRow.setPhone(stay.getPhone());
+            stayRow.setRoomNumber(stay.getRoomNumber());
+            stayRow.setRoomId(stay.getRoomId());
+            stayRow.setStayId(stay.getStayId());
+            stayRow.setCheckInDate(stay.getCheckInDate());
+            stayRow.setExpectedCheckOutDate(stay.getExpectedCheckOutDate());
+            stayRow.setActualCheckOutDate(stay.getActualCheckOut());
+            stayRow.setNumberOfGuests(stay.getNumberOfGuests());
+            stayRow.setStatusCode(stay.getStatusCode());
+            stayRow.setActualCheckIn(stay.getActualCheckIn());
 
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
-            int index = 1;
-            for (Object value : params) {
-                stmt.setObject(index++, value);
-            }
+            String checkinText = stayRow.getActualCheckIn() == null ? formatLocalDate(stayRow.getCheckInDate()) : formatDateTime(stayRow.getActualCheckIn());
+            String expectedCheckoutText = formatLocalDate(stayRow.getExpectedCheckOutDate());
+            String actualCheckoutText = stayRow.getActualCheckOutDate() == null ? "-" : formatDateTime(stayRow.getActualCheckOutDate());
 
-            try (ResultSet rs = stmt.executeQuery()) {
-                int rowIndex = 1;
-                while (rs.next()) {
-                    StayRow stayRow = new StayRow();
-                    stayRow.setReservationId(rs.getInt("reservation_id"));
-                    stayRow.setReservationCode(rs.getString("reservation_code"));
-                    stayRow.setGuestName(rs.getString("guest_name"));
-                    stayRow.setPhone(rs.getString("phone"));
-                    stayRow.setRoomNumber(rs.getString("room_number"));
-                    stayRow.setRoomId(rs.getInt("room_id"));
-                    stayRow.setStayId(rs.getObject("stay_id") == null ? 0 : rs.getInt("stay_id"));
-                    stayRow.setCheckInDate(readDate(rs.getDate("check_in_date")));
-                    stayRow.setExpectedCheckOutDate(readDate(rs.getDate("check_out_date")));
-                    stayRow.setActualCheckOutDate(readDateTime(rs.getTimestamp("actual_check_out")));
-                    stayRow.setNumberOfGuests(rs.getInt("number_of_guests"));
-                    stayRow.setStatusCode(rs.getString("display_status"));
-                    stayRow.setStayStatus(rs.getString("stay_status"));
-                    stayRow.setActualCheckIn(readDateTime(rs.getTimestamp("actual_check_in")));
-
-                    String checkinText = stayRow.getActualCheckIn() == null ? formatLocalDate(stayRow.getCheckInDate()) : formatDateTime(stayRow.getActualCheckIn());
-                    String expectedCheckoutText = stayRow.getExpectedCheckOutDate() == null ? "-" : formatLocalDate(stayRow.getExpectedCheckOutDate());
-                    String actualCheckoutText = stayRow.getActualCheckOutDate() == null ? "-" : formatDateTime(stayRow.getActualCheckOutDate());
-
-                    Object[] row = new Object[]{
-                            rowIndex++,
-                            stayRow.getReservationCode(),
-                            stayRow.getGuestName(),
-                            stayRow.getRoomNumber(),
-                            checkinText,
-                            expectedCheckoutText,
-                            actualCheckoutText,
-                            stayRow.getNumberOfGuests(),
-                            getStatusLabel(stayRow.getStatusCode()),
-                            stayRow
-                    };
-                    tableModel.addRow(row);
-                }
-            }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Không thể tải danh sách lưu trú: " + ex.getMessage(), "Lỗi dữ liệu", JOptionPane.ERROR_MESSAGE);
+            tableModel.addRow(new Object[]{
+                    rowIndex++,
+                    stayRow.getReservationCode(),
+                    stayRow.getGuestName(),
+                    stayRow.getRoomNumber(),
+                    checkinText,
+                    expectedCheckoutText,
+                    actualCheckoutText,
+                    stayRow.getNumberOfGuests(),
+                    getStatusLabel(stayRow.getStatusCode()),
+                    stayRow
+            });
         }
     }
 
@@ -613,20 +526,6 @@ public class StayManagementPanel extends JPanel {
 
     private String formatDateTime(LocalDateTime dateTime) {
         return dateTime == null ? "-" : dateTime.format(DISPLAY_DATE_TIME);
-    }
-
-    private LocalDateTime readDateTime(Timestamp timestamp) {
-        if (timestamp == null) {
-            return null;
-        }
-        return timestamp.toLocalDateTime();
-    }
-
-    private LocalDate readDate(Date date) {
-        if (date == null) {
-            return null;
-        }
-        return date.toLocalDate();
     }
 
     private int nvl(int value) {
@@ -722,67 +621,7 @@ public class StayManagementPanel extends JPanel {
     }
 
     private boolean performCheckIn(int reservationId, int roomId) {
-        String fetchReservation = "SELECT reservation_id, room_id, status, check_in_date, check_out_date FROM reservations WHERE reservation_id = ?";
-        String updateReservation = "UPDATE reservations SET status = 'CHECKED_IN' WHERE reservation_id = ? AND status IN ('PENDING', 'CONFIRMED')";
-        String insertStay = "INSERT INTO stays (reservation_id, room_id, actual_check_in, status, check_in_by) VALUES (?, ?, NOW(), 'CHECKED_IN', ?)";
-        String updateRoom = "UPDATE rooms SET status = 'OCCUPIED' WHERE room_id = ?";
-
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setAutoCommit(false);
-
-            int currentRoomId = -1;
-            String reservationStatus = null;
-            String checkInDate = null;
-            String checkOutDate = null;
-            try (PreparedStatement ps = conn.prepareStatement(fetchReservation)) {
-                ps.setInt(1, reservationId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        conn.rollback();
-                        return false;
-                    }
-                    currentRoomId = rs.getInt("room_id");
-                    reservationStatus = rs.getString("status");
-                    checkInDate = rs.getString("check_in_date");
-                    checkOutDate = rs.getString("check_out_date");
-                }
-            }
-
-            if (currentRoomId != roomId || reservationStatus == null || (!"PENDING".equals(reservationStatus) && !"CONFIRMED".equals(reservationStatus))) {
-                conn.rollback();
-                return false;
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(updateReservation)) {
-                ps.setInt(1, reservationId);
-                if (ps.executeUpdate() == 0) {
-                    conn.rollback();
-                    return false;
-                }
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(insertStay)) {
-                ps.setInt(1, reservationId);
-                ps.setInt(2, roomId);
-                if (currentUserId != null) {
-                    ps.setInt(3, currentUserId);
-                } else {
-                    ps.setNull(3, Types.INTEGER);
-                }
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(updateRoom)) {
-                ps.setInt(1, roomId);
-                ps.executeUpdate();
-            }
-
-            conn.commit();
-            return true;
-        } catch (SQLException ex) {
-            System.err.println("Lỗi check-in: " + ex.getMessage());
-            return false;
-        }
+        return stayService.checkInReservation(reservationId, roomId, currentUserId);
     }
 
     private void openCheckoutDialog(StayRow stayRow) {
@@ -902,51 +741,7 @@ public class StayManagementPanel extends JPanel {
     }
 
     private CheckoutSummary loadCheckoutSummary(int reservationId, int roomId, int stayId) {
-        String staySql = "SELECT s.actual_check_in, r.reservation_id, r.check_out_date, rt.price_per_night " +
-                "FROM stays s JOIN reservations r ON r.reservation_id = s.reservation_id " +
-                "JOIN rooms rm ON rm.room_id = s.room_id " +
-                "JOIN room_types rt ON rt.room_type_id = rm.room_type_id " +
-                "WHERE s.stay_id = ? AND s.room_id = ?";
-        String serviceSql = "SELECT COALESCE(SUM(su.total_amount), 0) AS service_amount FROM service_usages su WHERE su.stay_id = ?";
-
-        BigDecimal roomAmount = BigDecimal.ZERO;
-        BigDecimal serviceAmount = BigDecimal.ZERO;
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stayPs = conn.prepareStatement(staySql)) {
-            stayPs.setInt(1, stayId);
-            stayPs.setInt(2, roomId);
-            try (ResultSet stayRs = stayPs.executeQuery()) {
-                if (stayRs.next()) {
-                    Timestamp actualCheckIn = stayRs.getTimestamp("actual_check_in");
-                    Date expectedCheckout = stayRs.getDate("check_out_date");
-                    double pricePerNight = stayRs.getDouble("price_per_night");
-                    if (actualCheckIn != null && expectedCheckout != null) {
-                        LocalDateTime checkIn = actualCheckIn.toLocalDateTime();
-                        LocalDate expected = expectedCheckout.toLocalDate();
-                        long nights = Math.max(1, ChronoUnit.DAYS.between(checkIn.toLocalDate(), expected));
-                        roomAmount = BigDecimal.valueOf(nights * pricePerNight);
-                    } else if (pricePerNight > 0) {
-                        roomAmount = BigDecimal.valueOf(pricePerNight);
-                    }
-                }
-            }
-
-            try (PreparedStatement servicePs = conn.prepareStatement(serviceSql)) {
-                servicePs.setInt(1, stayId);
-                try (ResultSet serviceRs = servicePs.executeQuery()) {
-                    if (serviceRs.next()) {
-                        serviceAmount = BigDecimal.valueOf(serviceRs.getDouble("service_amount"));
-                    }
-                }
-            }
-        } catch (SQLException ex) {
-            System.err.println("Lỗi khi tính chi phí checkout: " + ex.getMessage());
-            return null;
-        }
-
-        BigDecimal total = roomAmount.add(serviceAmount);
-        return new CheckoutSummary(roomAmount.doubleValue(), serviceAmount.doubleValue(), total.doubleValue());
+        return stayService.getCurrentCheckoutSummary(stayId, roomId);
     }
 
     private void openAddServiceDialog(StayRow stayRow) {
@@ -1125,141 +920,9 @@ public class StayManagementPanel extends JPanel {
         if (stayRow == null || stayRow.getStayId() <= 0) {
             return -1;
         }
-
-        final String invoiceCode = "INV" + System.currentTimeMillis();
-        String checkExistingInvoice = "SELECT COUNT(*) FROM invoices WHERE stay_id = ?";
-        String checkStayStatus = "SELECT status FROM stays WHERE stay_id = ?";
-        String invoiceInsert = "INSERT INTO invoices (invoice_code, stay_id, room_amount, service_amount, discount_amount, tax_amount, total_amount, status, created_by) VALUES (?, ?, ?, ?, ?, 0, ?, 'PAID', ?)";
-        String invoiceDetailRoom = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'ROOM', ?, ?, ?, ?)";
-        String invoiceDetailService = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'SERVICE', ?, ?, ?, ?)";
-        String paymentInsert = "INSERT INTO payments (invoice_id, amount, payment_method, payment_date, note, received_by) VALUES (?, ?, ?, NOW(), ?, ?)";
-        String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
-        String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
-        String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
-        String cleaningInsert = "INSERT INTO maintenance_requests (room_id, title, description, maintenance_type, priority, status, reported_by, notes) "
-            + "VALUES (?, ?, ?, 'CLEANING', 'MEDIUM', 'OPEN', COALESCE(?, (SELECT MIN(user_id) FROM users)), ?)";
-        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
-
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement checkStayPs = conn.prepareStatement(checkStayStatus)) {
-                checkStayPs.setInt(1, stayRow.getStayId());
-                try (ResultSet rs = checkStayPs.executeQuery()) {
-                    if (rs.next() && "CHECKED_OUT".equalsIgnoreCase(rs.getString("status"))) {
-                        conn.rollback();
-                        return -1;
-                    }
-                }
-            }
-
-            try (PreparedStatement existingPs = conn.prepareStatement(checkExistingInvoice)) {
-                existingPs.setInt(1, stayRow.getStayId());
-                try (ResultSet rs = existingPs.executeQuery()) {
-                    if (rs.next() && rs.getInt(1) > 0) {
-                        conn.rollback();
-                        return -1;
-                    }
-                }
-            }
-
-            int invoiceId;
-            try (PreparedStatement invoicePs = conn.prepareStatement(invoiceInsert, Statement.RETURN_GENERATED_KEYS)) {
-                invoicePs.setString(1, invoiceCode);
-                invoicePs.setInt(2, stayRow.getStayId());
-                invoicePs.setDouble(3, summary.getRoomAmount());
-                invoicePs.setDouble(4, summary.getServiceAmount());
-                invoicePs.setDouble(5, discountAmount);
-                invoicePs.setDouble(6, Math.max(0, summary.getTotalAmount() - discountAmount));
-                if (currentUserId != null) {
-                    invoicePs.setInt(7, currentUserId);
-                } else {
-                    invoicePs.setNull(7, Types.INTEGER);
-                }
-                invoicePs.executeUpdate();
-
-                try (ResultSet keys = invoicePs.getGeneratedKeys()) {
-                    if (!keys.next()) {
-                        conn.rollback();
-                        return -1;
-                    }
-                    invoiceId = keys.getInt(1);
-                }
-            }
-
-            try (PreparedStatement roomDetail = conn.prepareStatement(invoiceDetailRoom)) {
-                roomDetail.setInt(1, invoiceId);
-                roomDetail.setString(2, "Phòng " + stayRow.getRoomNumber());
-                roomDetail.setInt(3, 1);
-                roomDetail.setDouble(4, summary.getRoomAmount());
-                roomDetail.setDouble(5, summary.getRoomAmount());
-                roomDetail.executeUpdate();
-            }
-
-            try (PreparedStatement serviceDetail = conn.prepareStatement(invoiceDetailService)) {
-                try (PreparedStatement usagePs = conn.prepareStatement(serviceUsageSql)) {
-                    usagePs.setInt(1, stayRow.getStayId());
-                    try (ResultSet usageRs = usagePs.executeQuery()) {
-                        while (usageRs.next()) {
-                            serviceDetail.setInt(1, invoiceId);
-                            serviceDetail.setString(2, usageRs.getString("service_name"));
-                            serviceDetail.setInt(3, usageRs.getInt("quantity"));
-                            serviceDetail.setDouble(4, usageRs.getDouble("unit_price"));
-                            serviceDetail.setDouble(5, usageRs.getDouble("total_amount"));
-                            serviceDetail.executeUpdate();
-                        }
-                    }
-                }
-            }
-
-            try (PreparedStatement paymentPs = conn.prepareStatement(paymentInsert)) {
-                paymentPs.setInt(1, invoiceId);
-                paymentPs.setDouble(2, Math.max(0, summary.getTotalAmount() - discountAmount));
-                paymentPs.setString(3, paymentMethod == null ? "CASH" : paymentMethod);
-                paymentPs.setString(4, "Thanh toán khi check-out");
-                if (currentUserId != null) {
-                    paymentPs.setInt(5, currentUserId);
-                } else {
-                    paymentPs.setNull(5, Types.INTEGER);
-                }
-                paymentPs.executeUpdate();
-            }
-
-            try (PreparedStatement stayPs = conn.prepareStatement(stayUpdate)) {
-                if (currentUserId != null) {
-                    stayPs.setInt(1, currentUserId);
-                } else {
-                    stayPs.setNull(1, Types.INTEGER);
-                }
-                stayPs.setInt(2, stayRow.getStayId());
-                stayPs.executeUpdate();
-            }
-
-            try (PreparedStatement reservationPs = conn.prepareStatement(reservationUpdate)) {
-                reservationPs.setInt(1, stayRow.getReservationId());
-                reservationPs.executeUpdate();
-            }
-
-            try (PreparedStatement roomPs = conn.prepareStatement(roomUpdate)) {
-                roomPs.setInt(1, stayRow.getRoomId());
-                roomPs.executeUpdate();
-            }
-
-            try (PreparedStatement cleaningPs = conn.prepareStatement(cleaningInsert)) {
-                cleaningPs.setInt(1, stayRow.getRoomId());
-                cleaningPs.setString(2, "Dọn dẹp phòng sau check-out");
-                cleaningPs.setString(3, "Tự động tạo sau khi khách check-out phòng " + stayRow.getRoomNumber());
-                if (currentUserId == null) cleaningPs.setNull(4, Types.INTEGER); else cleaningPs.setInt(4, currentUserId);
-                cleaningPs.setString(5, "Tạo tự động từ quy trình check-out");
-                cleaningPs.executeUpdate();
-            }
-
-            conn.commit();
-            return invoiceId;
-        } catch (SQLException ex) {
-            System.err.println("Lỗi khi thực hiện checkout: " + ex.getMessage());
-            return -1;
-        }
+        return stayService.checkoutAndPay(stayRow.getStayId(), stayRow.getReservationId(),
+                stayRow.getRoomId(), stayRow.getRoomNumber(), summary, discountAmount,
+                paymentMethod, currentUserId);
     }
 
     private static final class DiscountOption {
@@ -1387,69 +1050,7 @@ public class StayManagementPanel extends JPanel {
     }
 
     private StayDetail loadStayDetail(int reservationId, int roomId, int stayId) {
-        String detailSql = "SELECT res.reservation_id, res.reservation_code, g.full_name, g.phone, g.email, " +
-                "r.room_number, rt.type_name, rt.price_per_night, s.actual_check_in, res.check_out_date, s.actual_check_out, " +
-                "res.number_of_guests, CASE " +
-                "WHEN s.stay_id IS NULL AND res.status IN ('PENDING','CONFIRMED') THEN 'WAITING_CHECK_IN' " +
-                "WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL AND res.check_out_date <= CURDATE() THEN 'CHECKOUT_PENDING' " +
-                "WHEN s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL THEN 'IN_HOUSE' " +
-                "WHEN s.status = 'CHECKED_OUT' OR res.status = 'COMPLETED' THEN 'CHECKED_OUT' " +
-                "ELSE 'WAITING_CHECK_IN' END AS status_code " +
-                "FROM reservations res " +
-                "JOIN guests g ON g.guest_id = res.guest_id " +
-                "JOIN rooms r ON r.room_id = res.room_id " +
-                "JOIN room_types rt ON rt.room_type_id = r.room_type_id " +
-                "LEFT JOIN stays s ON s.reservation_id = res.reservation_id " +
-                "WHERE res.reservation_id = ?";
-
-        String serviceSql = "SELECT ser.service_name, su.quantity, su.unit_price, (su.quantity * su.unit_price) AS total_amount " +
-                "FROM service_usages su JOIN services ser ON ser.service_id = su.service_id WHERE su.stay_id = ?";
-
-        StayDetail detail = null;
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement detailPs = conn.prepareStatement(detailSql)) {
-            detailPs.setInt(1, reservationId);
-            try (ResultSet detailRs = detailPs.executeQuery()) {
-                if (!detailRs.next()) {
-                    return null;
-                }
-                detail = new StayDetail();
-                detail.setReservationCode(detailRs.getString("reservation_code"));
-                detail.setGuestName(detailRs.getString("full_name"));
-                detail.setPhone(detailRs.getString("phone"));
-                detail.setEmail(detailRs.getString("email"));
-                detail.setRoomNumber(detailRs.getString("room_number"));
-                detail.setRoomType(detailRs.getString("type_name"));
-                detail.setRoomPrice(detailRs.getDouble("price_per_night"));
-                detail.setActualCheckIn(readDateTime(detailRs.getTimestamp("actual_check_in")));
-                detail.setExpectedCheckOut(readDate(detailRs.getDate("check_out_date")));
-                detail.setActualCheckOut(readDateTime(detailRs.getTimestamp("actual_check_out")));
-                detail.setNumberOfGuests(detailRs.getInt("number_of_guests"));
-                detail.setStatusCode(detailRs.getString("status_code"));
-            }
-
-            if (detail != null && stayId > 0) {
-                try (PreparedStatement servicePs = conn.prepareStatement(serviceSql)) {
-                    servicePs.setInt(1, stayId);
-                    try (ResultSet serviceRs = servicePs.executeQuery()) {
-                        while (serviceRs.next()) {
-                            detail.getServiceUsages().add(new ServiceUsage(
-                                    serviceRs.getString("service_name"),
-                                    serviceRs.getInt("quantity"),
-                                    serviceRs.getDouble("unit_price"),
-                                    serviceRs.getDouble("total_amount")
-                            ));
-                        }
-                    }
-                }
-            }
-        } catch (SQLException ex) {
-            System.err.println("Lỗi tải chi tiết lưu trú: " + ex.getMessage());
-            return null;
-        }
-
-        return detail;
+        return stayService.getStayDetail(reservationId);
     }
 
     private static JButton createActionButton(String text, Color background, Color foreground, Color borderColor) {

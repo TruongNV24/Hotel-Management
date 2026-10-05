@@ -3,10 +3,124 @@ package com.cnj42.hotel.service;
 import com.cnj42.hotel.utils.DBConnection;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class InvoiceService {
 
     private final AuditLogService auditLogService = new AuditLogService();
+
+    public List<Map<String, Object>> searchInvoices(String keyword, String status) {
+        String sql = "SELECT i.invoice_id, i.invoice_code, i.stay_id, r.room_number, i.room_amount, i.service_amount, " +
+                "i.discount_amount, i.tax_amount, i.total_amount, i.status " +
+                "FROM invoices i JOIN stays s ON i.stay_id = s.stay_id JOIN rooms r ON s.room_id = r.room_id " +
+                "WHERE (? = '' OR i.invoice_code LIKE ? OR r.room_number LIKE ?) " +
+                "AND (? = 'Tất cả' OR i.status = ?) ORDER BY i.issued_at DESC";
+        List<Map<String, Object>> invoices = new ArrayList<>();
+        String value = keyword == null ? "" : keyword.trim();
+        String selectedStatus = status == null ? "Tất cả" : status;
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            statement.setString(2, "%" + value + "%");
+            statement.setString(3, "%" + value + "%");
+            statement.setString(4, selectedStatus);
+            statement.setString(5, selectedStatus);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    Map<String, Object> invoice = new HashMap<>();
+                    invoice.put("invoice_id", resultSet.getInt("invoice_id"));
+                    invoice.put("invoice_code", resultSet.getString("invoice_code"));
+                    invoice.put("stay_id", resultSet.getInt("stay_id"));
+                    invoice.put("room_number", resultSet.getString("room_number"));
+                    invoice.put("room_amount", resultSet.getDouble("room_amount"));
+                    invoice.put("service_amount", resultSet.getDouble("service_amount"));
+                    invoice.put("discount_amount", resultSet.getDouble("discount_amount"));
+                    invoice.put("tax_amount", resultSet.getDouble("tax_amount"));
+                    invoice.put("total_amount", resultSet.getDouble("total_amount"));
+                    invoice.put("status", resultSet.getString("status"));
+                    invoices.add(invoice);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Lỗi lấy danh sách hóa đơn: " + e.getMessage());
+        }
+        return invoices;
+    }
+
+    public Map<String, Object> getInvoiceSummary() {
+        String sql = "SELECT COUNT(*) AS invoice_count, " +
+                "SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) AS paid_count, " +
+                "SUM(CASE WHEN status = 'UNPAID' THEN 1 ELSE 0 END) AS unpaid_count, " +
+                "COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_amount ELSE 0 END), 0) AS revenue FROM invoices";
+        Map<String, Object> summary = new HashMap<>();
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            if (resultSet.next()) {
+                summary.put("invoice_count", resultSet.getInt("invoice_count"));
+                summary.put("paid_count", resultSet.getInt("paid_count"));
+                summary.put("unpaid_count", resultSet.getInt("unpaid_count"));
+                summary.put("revenue", resultSet.getDouble("revenue"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Lỗi lấy thống kê hóa đơn: " + e.getMessage());
+        }
+        return summary;
+    }
+
+    public List<Map<String, Object>> findStaysWithoutInvoice() {
+        String sql = "SELECT s.stay_id, r.room_number FROM stays s " +
+                "LEFT JOIN invoices i ON s.stay_id = i.stay_id JOIN rooms r ON s.room_id = r.room_id " +
+                "WHERE i.stay_id IS NULL AND s.status = 'CHECKED_IN'";
+        List<Map<String, Object>> stays = new ArrayList<>();
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                Map<String, Object> stay = new HashMap<>();
+                stay.put("stay_id", resultSet.getInt("stay_id"));
+                stay.put("room_number", resultSet.getString("room_number"));
+                stays.add(stay);
+            }
+        } catch (SQLException e) {
+            System.err.println("Lỗi lấy lượt lưu trú chưa có hóa đơn: " + e.getMessage());
+        }
+        return stays;
+    }
+
+    public Map<String, Object> getInvoicePreviewDetails(int invoiceId) {
+        String sql = "SELECT i.invoice_code, i.room_amount, i.service_amount, i.discount_amount, i.tax_amount, " +
+                "i.total_amount, i.status, i.issued_at, g.full_name AS guest_name, r.room_number " +
+                "FROM invoices i JOIN stays s ON i.stay_id = s.stay_id " +
+                "JOIN reservations res ON s.reservation_id = res.reservation_id " +
+                "JOIN guests g ON res.guest_id = g.guest_id JOIN rooms r ON s.room_id = r.room_id " +
+                "WHERE i.invoice_id = ?";
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, invoiceId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) return null;
+                Map<String, Object> details = new HashMap<>();
+                details.put("invoice_code", resultSet.getString("invoice_code"));
+                details.put("room_amount", resultSet.getDouble("room_amount"));
+                details.put("service_amount", resultSet.getDouble("service_amount"));
+                details.put("discount_amount", resultSet.getDouble("discount_amount"));
+                details.put("tax_amount", resultSet.getDouble("tax_amount"));
+                details.put("total_amount", resultSet.getDouble("total_amount"));
+                details.put("status", resultSet.getString("status"));
+                details.put("issued_at", resultSet.getTimestamp("issued_at"));
+                details.put("guest_name", resultSet.getString("guest_name"));
+                details.put("room_number", resultSet.getString("room_number"));
+                return details;
+            }
+        } catch (SQLException e) {
+            System.err.println("Lỗi tải hóa đơn xem trước: " + e.getMessage());
+            return null;
+        }
+    }
 
     /**
      * Tạo hóa đơn cho một lần lưu trú

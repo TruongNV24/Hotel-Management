@@ -1,6 +1,7 @@
 package com.cnj42.hotel.dao;
 
 import com.cnj42.hotel.model.DashboardData;
+import com.cnj42.hotel.model.Reservation;
 import com.cnj42.hotel.utils.DBConnection;
 
 import java.sql.Connection;
@@ -11,8 +12,30 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DashboardDAO {
+
+    public List<Reservation> getRecentReservations() throws SQLException {
+        String sql = "SELECT r.reservation_id, r.check_in_date, r.status, g.full_name " +
+                "FROM reservations r LEFT JOIN reservation_guests rg ON r.reservation_id = rg.reservation_id " +
+                "LEFT JOIN guests g ON rg.guest_id = g.guest_id ORDER BY r.created_at DESC LIMIT 5";
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<Reservation> reservations = new ArrayList<>();
+            while (resultSet.next()) {
+                Reservation reservation = new Reservation();
+                reservation.setReservationId(resultSet.getInt("reservation_id"));
+                reservation.setCheckInDate(resultSet.getString("check_in_date"));
+                reservation.setStatus(resultSet.getString("status"));
+                reservation.setGuestName(resultSet.getString("full_name"));
+                reservations.add(reservation);
+            }
+            return reservations;
+        }
+    }
 
     public DashboardData getDashboardData() throws SQLException {
         try (Connection conn = DBConnection.getConnection()) {

@@ -6,9 +6,11 @@ import com.cnj42.hotel.model.Stay;
 import com.cnj42.hotel.model.StayDetail;
 import com.cnj42.hotel.utils.DBConnection;
 
+import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +20,7 @@ public class StayDAO {
 
     public Map<String, Integer> getStayStats() throws SQLException {
         String sql = "SELECT " +
-                "SUM(CASE WHEN res.status IN ('PENDING', 'CONFIRMED') THEN 1 ELSE 0 END) AS waiting_checkin, " +
+            "SUM(CASE WHEN s.stay_id IS NULL AND res.status IN ('PENDING', 'CONFIRMED') THEN 1 ELSE 0 END) AS waiting_checkin, " +
                 "SUM(CASE WHEN res.status = 'CHECKED_IN' OR (s.status = 'CHECKED_IN' AND s.actual_check_out IS NULL) THEN 1 ELSE 0 END) AS in_house, " +
                 "SUM(CASE WHEN res.status = 'CHECKED_IN' AND s.actual_check_out IS NULL AND res.check_out_date <= CURDATE() THEN 1 ELSE 0 END) AS waiting_checkout, " +
                 "SUM(CASE WHEN res.status = 'COMPLETED' OR s.status = 'CHECKED_OUT' THEN 1 ELSE 0 END) AS checked_out " +
@@ -84,11 +86,11 @@ public class StayDAO {
         }
 
         if (fromDate != null) {
-            sql.append("AND COALESCE(s.actual_check_in, res.check_in_date) >= ? ");
+            sql.append("AND DATE(COALESCE(s.actual_check_in, res.check_in_date)) >= ? ");
             params.add(Date.valueOf(fromDate));
         }
         if (toDate != null) {
-            sql.append("AND COALESCE(s.actual_check_in, res.check_in_date) <= ? ");
+            sql.append("AND DATE(COALESCE(s.actual_check_in, res.check_in_date)) <= ? ");
             params.add(Date.valueOf(toDate));
         }
 
@@ -246,6 +248,183 @@ public class StayDAO {
         }
 
         return new CheckoutSummary(roomAmount, serviceAmount);
+    }
+
+    public Integer findInvoiceIdByStay(int stayId) throws SQLException {
+        String sql = "SELECT invoice_id FROM invoices WHERE stay_id = ? ORDER BY invoice_id DESC LIMIT 1";
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, stayId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? resultSet.getInt("invoice_id") : null;
+            }
+        }
+    }
+
+    public CheckoutSummary getCurrentCheckoutSummary(int stayId, int roomId) throws SQLException {
+        String staySql = "SELECT s.actual_check_in, r.check_out_date, rt.price_per_night " +
+                "FROM stays s JOIN reservations r ON r.reservation_id = s.reservation_id " +
+                "JOIN rooms rm ON rm.room_id = s.room_id " +
+                "JOIN room_types rt ON rt.room_type_id = rm.room_type_id " +
+                "WHERE s.stay_id = ? AND s.room_id = ?";
+        String serviceSql = "SELECT COALESCE(SUM(total_amount), 0) FROM service_usages WHERE stay_id = ?";
+
+        BigDecimal roomAmount = BigDecimal.ZERO;
+        BigDecimal serviceAmount = BigDecimal.ZERO;
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement stayStatement = connection.prepareStatement(staySql)) {
+            stayStatement.setInt(1, stayId);
+            stayStatement.setInt(2, roomId);
+            try (ResultSet resultSet = stayStatement.executeQuery()) {
+                if (resultSet.next()) {
+                    Timestamp actualCheckIn = resultSet.getTimestamp("actual_check_in");
+                    Date expectedCheckout = resultSet.getDate("check_out_date");
+                    double pricePerNight = resultSet.getDouble("price_per_night");
+                    if (actualCheckIn != null && expectedCheckout != null) {
+                        long nights = Math.max(1, ChronoUnit.DAYS.between(
+                                actualCheckIn.toLocalDateTime().toLocalDate(), expectedCheckout.toLocalDate()));
+                        roomAmount = BigDecimal.valueOf(nights * pricePerNight);
+                    } else if (pricePerNight > 0) {
+                        roomAmount = BigDecimal.valueOf(pricePerNight);
+                    }
+                }
+            }
+
+            try (PreparedStatement serviceStatement = connection.prepareStatement(serviceSql)) {
+                serviceStatement.setInt(1, stayId);
+                try (ResultSet resultSet = serviceStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        serviceAmount = BigDecimal.valueOf(resultSet.getDouble(1));
+                    }
+                }
+            }
+        }
+
+        return new CheckoutSummary(roomAmount.doubleValue(), serviceAmount.doubleValue(),
+                roomAmount.add(serviceAmount).doubleValue());
+    }
+
+    public int checkoutAndPay(int stayId, int reservationId, int roomId, String roomNumber,
+            CheckoutSummary summary, double discountAmount, String paymentMethod, Integer currentUserId)
+            throws SQLException {
+        String checkExistingInvoice = "SELECT COUNT(*) FROM invoices WHERE stay_id = ?";
+        String checkStayStatus = "SELECT status FROM stays WHERE stay_id = ?";
+        String invoiceInsert = "INSERT INTO invoices (invoice_code, stay_id, room_amount, service_amount, discount_amount, tax_amount, total_amount, status, created_by) VALUES (?, ?, ?, ?, ?, 0, ?, 'PAID', ?)";
+        String invoiceDetailRoom = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'ROOM', ?, ?, ?, ?)";
+        String invoiceDetailService = "INSERT INTO invoice_details (invoice_id, item_type, description, quantity, unit_price, amount) VALUES (?, 'SERVICE', ?, ?, ?, ?)";
+        String paymentInsert = "INSERT INTO payments (invoice_id, amount, payment_method, payment_date, note, received_by) VALUES (?, ?, ?, NOW(), ?, ?)";
+        String stayUpdate = "UPDATE stays SET status = 'CHECKED_OUT', actual_check_out = NOW(), check_out_by = ? WHERE stay_id = ? AND status <> 'CHECKED_OUT'";
+        String reservationUpdate = "UPDATE reservations SET status = 'COMPLETED' WHERE reservation_id = ? AND status <> 'COMPLETED'";
+        String roomUpdate = "UPDATE rooms SET status = 'CLEANING' WHERE room_id = ?";
+        String cleaningInsert = "INSERT INTO maintenance_requests (room_id, title, description, maintenance_type, priority, status, reported_by, notes) " +
+                "VALUES (?, ?, ?, 'CLEANING', 'MEDIUM', 'OPEN', COALESCE(?, (SELECT MIN(user_id) FROM users)), ?)";
+        String serviceUsageSql = "SELECT s.service_name, su.quantity, su.unit_price, su.total_amount " +
+                "FROM service_usages su JOIN services s ON s.service_id = su.service_id WHERE su.stay_id = ?";
+
+        try (Connection connection = DBConnection.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement statement = connection.prepareStatement(checkStayStatus)) {
+                    statement.setInt(1, stayId);
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        if (resultSet.next() && "CHECKED_OUT".equalsIgnoreCase(resultSet.getString("status"))) {
+                            connection.rollback();
+                            return -1;
+                        }
+                    }
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(checkExistingInvoice)) {
+                    statement.setInt(1, stayId);
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        if (resultSet.next() && resultSet.getInt(1) > 0) {
+                            connection.rollback();
+                            return -1;
+                        }
+                    }
+                }
+
+                int invoiceId;
+                try (PreparedStatement statement = connection.prepareStatement(invoiceInsert, Statement.RETURN_GENERATED_KEYS)) {
+                    statement.setString(1, "INV" + System.currentTimeMillis());
+                    statement.setInt(2, stayId);
+                    statement.setDouble(3, summary.getRoomAmount());
+                    statement.setDouble(4, summary.getServiceAmount());
+                    statement.setDouble(5, discountAmount);
+                    statement.setDouble(6, Math.max(0, summary.getTotalAmount() - discountAmount));
+                    if (currentUserId == null) statement.setNull(7, Types.INTEGER); else statement.setInt(7, currentUserId);
+                    statement.executeUpdate();
+                    try (ResultSet keys = statement.getGeneratedKeys()) {
+                        if (!keys.next()) {
+                            connection.rollback();
+                            return -1;
+                        }
+                        invoiceId = keys.getInt(1);
+                    }
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(invoiceDetailRoom)) {
+                    statement.setInt(1, invoiceId);
+                    statement.setString(2, "Phòng " + roomNumber);
+                    statement.setInt(3, 1);
+                    statement.setDouble(4, summary.getRoomAmount());
+                    statement.setDouble(5, summary.getRoomAmount());
+                    statement.executeUpdate();
+                }
+
+                try (PreparedStatement detailStatement = connection.prepareStatement(invoiceDetailService);
+                     PreparedStatement usageStatement = connection.prepareStatement(serviceUsageSql)) {
+                    usageStatement.setInt(1, stayId);
+                    try (ResultSet resultSet = usageStatement.executeQuery()) {
+                        while (resultSet.next()) {
+                            detailStatement.setInt(1, invoiceId);
+                            detailStatement.setString(2, resultSet.getString("service_name"));
+                            detailStatement.setInt(3, resultSet.getInt("quantity"));
+                            detailStatement.setDouble(4, resultSet.getDouble("unit_price"));
+                            detailStatement.setDouble(5, resultSet.getDouble("total_amount"));
+                            detailStatement.executeUpdate();
+                        }
+                    }
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(paymentInsert)) {
+                    statement.setInt(1, invoiceId);
+                    statement.setDouble(2, Math.max(0, summary.getTotalAmount() - discountAmount));
+                    statement.setString(3, paymentMethod == null ? "CASH" : paymentMethod);
+                    statement.setString(4, "Thanh toán khi check-out");
+                    if (currentUserId == null) statement.setNull(5, Types.INTEGER); else statement.setInt(5, currentUserId);
+                    statement.executeUpdate();
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(stayUpdate)) {
+                    if (currentUserId == null) statement.setNull(1, Types.INTEGER); else statement.setInt(1, currentUserId);
+                    statement.setInt(2, stayId);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(reservationUpdate)) {
+                    statement.setInt(1, reservationId);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(roomUpdate)) {
+                    statement.setInt(1, roomId);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(cleaningInsert)) {
+                    statement.setInt(1, roomId);
+                    statement.setString(2, "Dọn dẹp phòng sau check-out");
+                    statement.setString(3, "Tự động tạo sau khi khách check-out phòng " + roomNumber);
+                    if (currentUserId == null) statement.setNull(4, Types.INTEGER); else statement.setInt(4, currentUserId);
+                    statement.setString(5, "Tạo tự động từ quy trình check-out");
+                    statement.executeUpdate();
+                }
+
+                connection.commit();
+                return invoiceId;
+            } catch (SQLException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        }
     }
 
     public boolean checkoutAndCreateInvoice(int stayId, int reservationId, int roomId, String paymentMethod, Integer currentUserId) throws SQLException {

@@ -1,19 +1,16 @@
 package com.cnj42.hotel.ui;
 
 import com.cnj42.hotel.model.Maintenance;
+import com.cnj42.hotel.model.LookupOption;
 import com.cnj42.hotel.model.User;
 import com.cnj42.hotel.service.MaintenanceService;
 import com.cnj42.hotel.service.PermissionService;
-import com.cnj42.hotel.utils.DBConnection;
+import com.cnj42.hotel.service.ReferenceDataService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -31,6 +28,7 @@ public class MaintenanceManagementPanel extends JPanel {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final User currentUser;
     private final MaintenanceService maintenanceService = new MaintenanceService();
+    private final ReferenceDataService referenceDataService = new ReferenceDataService();
     private final JTextField roomFilter = new JTextField(5);
     private final JTextField searchField = new JTextField(15);
     private final JComboBox<String> typeFilter = new JComboBox<>(new String[]{"ALL", Maintenance.PREVENTIVE, Maintenance.CORRECTIVE, Maintenance.EMERGENCY, Maintenance.INSPECTION, Maintenance.CLEANING, Maintenance.OTHER});
@@ -262,9 +260,7 @@ public class MaintenanceManagementPanel extends JPanel {
 
     private void assignSelected() {
         Maintenance record = selectedMaintenance(); if (record == null) return;
-        JComboBox<ReferenceOption> assigneeBox = createReferenceBox(
-            "SELECT user_id, CONCAT(full_name, ' (', username, ')') FROM users "
-                + "WHERE status = 'ACTIVE' ORDER BY full_name");
+        JComboBox<ReferenceOption> assigneeBox = createReferenceBox("ACTIVE_USER");
         selectReference(assigneeBox, record.getAssignedTo());
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.add(new JLabel("Nhân viên thực hiện:"), BorderLayout.NORTH);
@@ -305,17 +301,11 @@ public class MaintenanceManagementPanel extends JPanel {
     private String empty(String value) { return value == null ? "" : value; }
     private String formatDuration(Integer minutes) { if (minutes == null) return "-"; return (minutes / 60) + "h " + (minutes % 60) + "m"; }
 
-    private JComboBox<ReferenceOption> createReferenceBox(String sql) {
+    private JComboBox<ReferenceOption> createReferenceBox(String type) {
         JComboBox<ReferenceOption> box = new JComboBox<>();
         box.addItem(new ReferenceOption(null, "Không liên kết"));
-        try (Connection connection = DBConnection.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                box.addItem(new ReferenceOption(resultSet.getInt(1), resultSet.getString(2)));
-            }
-        } catch (SQLException exception) {
-            System.err.println("Không thể tải danh sách nhân viên: " + exception.getMessage());
+        for (LookupOption option : referenceDataService.findOptions(type)) {
+            box.addItem(new ReferenceOption(option.getId(), option.getLabel()));
         }
         box.setPreferredSize(new Dimension(280, 28));
         return box;

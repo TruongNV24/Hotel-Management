@@ -27,6 +27,15 @@ public class RoomService {
         }
     }
 
+    public List<Room> getAvailableRooms() {
+        try {
+            return roomDAO.getAvailableRooms();
+        } catch (SQLException e) {
+            System.err.println("Lỗi khi lấy danh sách phòng trống: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
     public List<Room> searchRooms(String keyword, String status) {
         try {
             return roomDAO.searchRooms(keyword, status);
